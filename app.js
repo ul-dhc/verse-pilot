@@ -6,16 +6,28 @@ const modeNames={vision:'Vision',hearing:'Hearing',body:'Bodily experience',smel
 const langs={LV:'lv',NO:'no',FI:'fi',SE:'sv'};
 let map,mapReady=false,mapScope=null,markers,baseTiles;
 const collectionColours={LV:'#b6a3cc',NO:'#97bcae',FI:'#d6b796',SE:'#9ebacf'};
-const sensoryColours={vision:'#f3c95c',hearing:'#9b78ff',body:'#dc94b2',smell:'#d9a877',taste:'#4fd1bd',orientation:'#4b9fff',other:'#25bfd3'};
-const sensoryPalettes={dark:{...sensoryColours},light:{vision:'#887018',hearing:'#7550ba',body:'#ae648a',smell:'#956e37',taste:'#087d70',orientation:'#2169bf',other:'#087c90'}};
-let mapView='senses',countryLayer,selectedEvent=null;
+// CSS tokens are the single colour source for HTML, SVG and canvas marks.
+const sensoryTokens={vision:'vision',hearing:'hearing',body:'bodily',smell:'smell',taste:'taste',orientation:'space',other:'other'};
+const sensoryColours={};
+function themeToken(name){return getComputedStyle(document.documentElement).getPropertyValue('--'+name).trim()}
+function readSensoryColours(){for(const [mode,token] of Object.entries(sensoryTokens))sensoryColours[mode]=themeToken('sens-'+token)}
+readSensoryColours();
+function relativeLuminance(hex){const channels=hex.replace('#','').match(/../g).map(c=>parseInt(c,16)/255).map(c=>c<=.04045?c/12.92:((c+.055)/1.055)**2.4);return .2126*channels[0]+.7152*channels[1]+.0722*channels[2]}
+function chartLabelColour(fill){
+ const luminance=relativeLuminance(fill),dark=themeToken('chart-label-dark'),light=themeToken('chart-label-light');
+ const contrast=c=>{const l=relativeLuminance(c);return (Math.max(l,luminance)+.05)/(Math.min(l,luminance)+.05)};
+ const preferred=contrast(dark)>=contrast(light)?dark:light;
+ // A few mid-luminance Light pigments need more contrast than either label token.
+ return contrast(preferred)>=4.5?preferred:(contrast('#07111F')>=4.5?'#07111F':'#FFFFFF');
+}
+let mapView='density',countryLayer,selectedEvent=null;
 let densitySort='density',densityShowAll=true,densitySelected=null;
 document.addEventListener('click',ev=>{if(densitySelected&&!ev.target.closest('.density-list')){densitySelected=null;document.querySelector('.density-list')?.classList.remove('has-selection');document.querySelectorAll('.density-row.is-selected').forEach(row=>{row.classList.remove('is-selected');row.setAttribute('aria-pressed','false')});const caption=document.querySelector('.density-caption');if(caption){caption.querySelector('strong').textContent='Explore the weave';caption.querySelector('span').textContent='Hover or focus a strand to inspect a narrative · click to read'}}},true);
 let configModes=new Set(Object.keys(modeNames)),eventMarks='events',researchView='comparison',flowSelected=null;
 let selected='LV:130801007',tab='original',highlight=true,filtered=DATA;
 let showResponses=false,showCandidates=false;
 function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
-function tone(node,g){node.style.setProperty('--tone',`var(--${g})`);return node}
+function tone(node,g){node.dataset.mode=g;node.style.setProperty('--tone',`var(--${g})`);return node}
 function chip(text,g){return tone(el('span','chip',text),g||'other')}
 function button(text,action){const b=el('button','',text);b.type='button';b.onclick=action;return b}
 function check(container,value,label,count,group){const l=el('label','check'),i=el('input');i.type='checkbox';i.value=value;i.name=group;i.onchange=()=>{mapScope=null;update()};l.append(i);if(group==='mode')l.append(tone(el('span','dot'),value));l.append(document.createTextNode(label));if(count!==undefined)l.append(el('span','count',count));container.append(l)}
@@ -70,7 +82,7 @@ function original(r,parent,isTranslation=false){
   const events=[...new Map(ranges.filter(s=>s.start<=a&&s.end>=b).map(s=>[s.event.id,s.event])).values()];
   if(!events.length||!highlight){text.append(document.createTextNode(segment));continue}
   const sensory=events.filter(e=>e.type==='conservative'),modes=[...new Set(sensory.flatMap(e=>e.groups))],mark=el('mark',modes.length>1?'multi':'',segment);
-  if(modes.length){tone(mark,modes[0]);if(modes[1])mark.style.setProperty('--tone2',`var(--${modes[1]})`)}else mark.classList.add('auxiliary-mark');
+  if(modes.length){mark.dataset.modes=modes.join(' ');tone(mark,modes[0]);if(modes[1])mark.style.setProperty('--tone2',`var(--${modes[1]})`)}else mark.classList.add('auxiliary-mark');
   if(events.some(e=>e.type==='candidate'))mark.classList.add('candidate-mark');
   if(events.some(e=>e.type==='response'))mark.classList.add('response-mark');
   if(selectedEvent?.r.key===r.key&&events.some(e=>e.id===selectedEvent.e.id))mark.classList.add('chosen');
@@ -105,7 +117,16 @@ function initMap(){
  for(const [name,lat,lon] of [['NORWAY',65,10],['SWEDEN',63,16],['FINLAND',65,26],['LATVIA',56.6,24.8],['ESTONIA',59,25],['BALTIC SEA',57.7,19]])L.marker([lat,lon],{interactive:false,keyboard:false,icon:L.divIcon({className:'country-label',html:name,iconSize:[90,20]})}).addTo(map);
  markers=L.layerGroup().addTo(map);mapReady=true;
  document.querySelectorAll('[data-map-view]').forEach(b=>b.onclick=()=>{mapView=b.dataset.mapView;renderMap(applyFilters())});
- $('#map-palette').onchange=()=>{const palette=$('#map-palette').value;Object.assign(sensoryColours,palette==='dark'?sensoryPalettes.dark:sensoryPalettes.light);document.querySelectorAll('#config-modes button').forEach(b=>b.style.setProperty('--mode-colour',sensoryColours[b.dataset.mode]));$('#corpus-map').classList.toggle('paper',palette==='paper');$('#corpus-map').classList.toggle('night',palette==='dark');$('#configuration').classList.toggle('night',palette==='dark');countryLayer.setStyle({fillColor:palette==='dark'?'#142030':palette==='paper'?'#f6f1e7':'#f1f3ee',color:palette==='dark'?'#263343':palette==='paper'?'#d7cfc0':'#cad5d2'});if(mapReady){renderMap(applyFilters());renderConfigurations()}};
+ $('#map-palette').value=document.documentElement.dataset.theme;
+ $('#map-palette').onchange=ev=>{
+  const palette=$('#map-palette').value;
+  document.documentElement.dataset.theme=palette;readSensoryColours();
+  if(ev){try{localStorage.setItem('verse-theme',palette)}catch{ /* Theme switching also works when browser storage is blocked. */ }}
+  document.querySelectorAll('#config-modes button').forEach(b=>b.style.setProperty('--mode-colour',sensoryColours[b.dataset.mode]));
+  $('#corpus-map').classList.toggle('night',palette==='dark');$('#configuration').classList.toggle('night',palette==='dark');
+  countryLayer.setStyle({fillColor:themeToken('map-land'),color:themeToken('map-border'),weight:.75});
+  if(mapReady){renderMap(applyFilters());renderConfigurations()}
+ };
  $('#map-palette').onchange();
  $('#event-marks').onchange=()=>{eventMarks=$('#event-marks').value;renderMap(applyFilters())};
  $('#heat-intensity').oninput=()=>{$('#heat-intensity-value').textContent=$('#heat-intensity').value+'%';renderMap(applyFilters())};
@@ -169,6 +190,15 @@ function matchingEvents(r){
 function eventEntries(records){return records.flatMap(r=>matchingEvents(r).map(e=>({r,e})))}
 function eventColour(e){return sensoryColours[e.groups[0]]||sensoryColours.other}
 function eventGradient(e){const gs=e.groups;return gs.length<2?eventColour(e):`conic-gradient(${gs.map((g,i)=>`${sensoryColours[g]} ${i*100/gs.length}% ${(i+1)*100/gs.length}%`).join(',')})`}
+function eventMarkerSymbol(e,size){
+ const centre=size/2+3,radius=size/2-.7,side=size+6,groups=e.groups.length?e.groups:['other'];
+ const shapes=groups.length===1?`<circle class="event-fill" cx="${centre}" cy="${centre}" r="${radius}" fill="${sensoryColours[groups[0]]}"/><circle class="event-edge" cx="${centre}" cy="${centre}" r="${radius}" stroke="${sensoryColours[groups[0]]}"/>`:groups.map((g,i)=>{
+  const a=i*2*Math.PI/groups.length-Math.PI/2,b=(i+1)*2*Math.PI/groups.length-Math.PI/2;
+  const x1=centre+Math.cos(a)*radius,y1=centre+Math.sin(a)*radius,x2=centre+Math.cos(b)*radius,y2=centre+Math.sin(b)*radius;
+  return `<path class="event-fill" d="M${centre} ${centre}L${x1} ${y1}A${radius} ${radius} 0 0 1 ${x2} ${y2}Z" fill="${sensoryColours[g]}"/><path class="event-edge" d="M${x1} ${y1}A${radius} ${radius} 0 0 1 ${x2} ${y2}" stroke="${sensoryColours[g]}"/>`;
+ }).join('');
+ return `<svg class="event-glyph" aria-hidden="true" width="${side}" height="${side}" viewBox="0 0 ${side} ${side}" style="--event-colour:${eventColour(e)}">${shapes}<circle class="selection-ring" cx="${centre}" cy="${centre}" r="${radius+3}"/></svg>`;
+}
 function chooseEvent(r,e){
  selected=r.key;selectedEvent={r,e};tab='original';highlight=true;
  if(!filtered.some(x=>x.key===r.key)){mapScope=null;update()}
@@ -195,11 +225,11 @@ function renderEventMap(records,background=false){
  const all=eventEntries(records),groups=eventMapLayout(records),mappedCount=groups.reduce((n,g)=>n+g.entries.length,0);
  if(!background)$('#map-count').textContent=`${mappedCount} mapped events · ${all.length-mappedCount} without coordinates`;
  if(!background)$('#map-explanation').textContent='One dot = one sensory event. Fine spokes lead to its source-place anchor; spread is visual, not geographic. Multicoloured dots have multiple modes. Select a dot to read its passage; select a place ring to explore its events. Click an empty area of the map to clear the selection.';
- const dotSize=Math.min(14,7+Math.max(0,map.getZoom()-4.25)*1.2),hitSize=Math.max(18,dotSize+8);
+ const dotSize=Math.min(15,8+Math.max(0,map.getZoom()-4.25)*1.2),hitSize=Math.max(20,dotSize+10);
  for(const {loc,entries} of groups){
   entries.forEach(({r,e,position})=>{const colour=eventColour(e);
-   L.polyline([[loc.lat,loc.lon],position],{color:colour,weight:.75,opacity:background?.06:.38,interactive:false}).addTo(markers);
-   const dot=L.marker(position,{icon:L.divIcon({className:'event-map-dot'+(background?' map-context-dot':''),html:`<span style="background:${eventGradient(e)};width:${dotSize}px;height:${dotSize}px"></span>`,iconSize:[hitSize,hitSize],iconAnchor:[hitSize/2,hitSize/2]}),keyboard:!background,interactive:!background,opacity:background?.24:1,title:`${e.id} · ${e.modalities.join(', ')}`}).addTo(markers);
+   L.polyline([[loc.lat,loc.lon],position],{color:colour,weight:.65,opacity:background?.04:.2,interactive:false}).addTo(markers);
+   const dot=L.marker(position,{icon:L.divIcon({className:'event-map-dot'+(background?' map-context-dot':''),html:eventMarkerSymbol(e,dotSize),iconSize:[hitSize,hitSize],iconAnchor:[hitSize/2,hitSize/2]}),keyboard:!background,interactive:!background,opacity:background?.24:1,title:`${e.id} · ${e.modalities.join(', ')}`}).addTo(markers);
    if(background){dot.getElement().removeAttribute('title');dot.getElement().setAttribute('aria-hidden','true');return}
    const isSelected=selectedEvent?.r.key===r.key&&selectedEvent?.e.id===e.id;
    dot.getElement().classList.toggle('is-selected',isSelected);dot.getElement().setAttribute('aria-pressed',String(isSelected));
@@ -207,40 +237,60 @@ function renderEventMap(records,background=false){
    const eventTip=el('div','map-event-tip');eventTip.append(el('strong','',e.modalities.join(' · ')),el('span','map-tip-place',loc.label),el('span','map-tip-id',e.id));dot.bindTooltip(eventTip,{direction:'top',offset:[0,-8],className:'event-tooltip'});dot.on('click',()=>chooseEvent(r,e));dot.getElement().addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();ev.stopPropagation();chooseEvent(r,e)}});
   });
   if(background)continue;
-  const anchor=L.circleMarker([loc.lat,loc.lon],{radius:5,color:'#7ca99f',weight:1.5,fillColor:$('#map-palette').value==='dark'?'#0c1523':'#f7faf7',fillOpacity:1,dashArray:loc.precision==='source place'?null:'2 2'}).addTo(markers);
+  const anchor=L.circleMarker([loc.lat,loc.lon],{radius:5,color:themeToken('map-label'),weight:1.2,fillColor:themeToken('map-water'),fillOpacity:.85,dashArray:loc.precision==='source place'?null:'2 2'}).addTo(markers);
   anchor.bindTooltip(el('span','',`${loc.label} · ${entries.length} events${loc.precision==='source place'?'':' · approximate / regional'}`));anchor.on('click',()=>{mapScope=new Set(entries.map(x=>x.r.key));update();showInspection('config')});
  }
+}
+function concentrationIntensity(percent){
+ // Displayed 100% now matches the former 60% appearance. Keep both endpoints
+ // and a responsive slider throughout the Soft–Bright range.
+ const calibrated=percent<=100?40+(percent-40)/3:60+(percent-100)*1.5;
+ return calibrated/100;
 }
 function renderEventConcentration(records){
  const all=eventEntries(records),mapped=all.filter(x=>x.r.locations.length),sourceGroups=eventMapGroups(records);
  const cells=new Map(sourceGroups.map((group,i)=>[i,group]));
  const dark=$('#map-palette').value==='dark',radius=Number($('#heat-radius').value),contours=$('#heat-contours').checked;
- const legend=$('#map-legend');legend.replaceChildren(el('strong','','Sensory layers'));for(const [g,name] of Object.entries(modeNames)){const item=button(name,()=>{configModes=new Set([g]);$('#config-match').value='any';update()});const swatch=el('b');swatch.style.background=sensoryColours[g];item.prepend(swatch);item.className='heat-category';item.setAttribute('aria-pressed',String(configModes.size===1&&configModes.has(g)));legend.append(item)}legend.append(button('All modes',()=>{resetSensorySelection();update()}));
+ const legend=$('#map-legend');legend.replaceChildren(el('strong','','Sensory layers'));for(const [g,name] of Object.entries(modeNames)){const item=button(name,()=>{configModes=new Set([g]);$('#config-match').value='any';update()});const swatch=el('b');swatch.style.background=sensoryColours[g];item.prepend(swatch);item.className='heat-category';item.style.setProperty('--mode-colour',sensoryColours[g]);item.setAttribute('aria-pressed',String(configModes.size===1&&configModes.has(g)));legend.append(item)}legend.append(button('All modes',()=>{resetSensorySelection();update()}));
  $('#map-count').textContent=`${mapped.length} mapped events · ${all.length-mapped.length} without coordinates`;
- $('#map-explanation').textContent=`Colour fields follow supplied source coordinates. Hue shows the strongest local sensory category; brightness shows coded event concentration. Nearby locations blend within a ${radius}-pixel smoothing radius. ${contours?'Contour lines show smoothed concentration levels, not distance rings. ':''}Radius adjusts visual blending, not geographic distance or coordinate accuracy. Select a category to inspect its layer. Approximate source places remain approximate.`;
+ $('#map-explanation').textContent=`Colour fields follow supplied source coordinates. Mixed colours show overlapping sensory layers; select a category to see its own colour. Brightness shows local concentration. Nearby locations blend within a ${radius}-pixel smoothing radius. ${contours?'Coloured contours trace each sensory layer, not distance rings. ':''}Radius adjusts visual blending, not geographic distance or coordinate accuracy. Approximate source places remain approximate.`;
  const dimensions=map.getSize(),heat=document.createElement('canvas');heat.width=dimensions.x;heat.height=dimensions.y;
- const ctx=heat.getContext('2d'),modes=Object.keys(modeNames),fields=modes.map(()=>new Float32Array(heat.width*heat.height)),intensity=Number($('#heat-intensity').value)/100;
+ const ctx=heat.getContext('2d'),modes=Object.keys(modeNames),fields=modes.map(()=>new Float32Array(heat.width*heat.height)),eventField=new Float32Array(heat.width*heat.height),intensity=concentrationIntensity(Number($('#heat-intensity').value));
+ const sidebarModes=[...document.querySelectorAll('[name=mode]:checked')].map(input=>input.value);
+ const visibleModes=configModes.size<modes.length?configModes:new Set(sidebarModes.length?sidebarModes:modes);
  for(const {loc,entries} of sourceGroups){
-  const point=map.latLngToContainerPoint([loc.lat,loc.lon]),weights=modes.map(g=>entries.filter(x=>x.e.groups.includes(g)).length);
+  const point=map.latLngToContainerPoint([loc.lat,loc.lon]),weights=modes.map(g=>visibleModes.has(g)?entries.filter(x=>x.e.groups.includes(g)).length:0);
   for(let y=Math.max(0,Math.floor(point.y-radius));y<Math.min(heat.height,point.y+radius);y++)for(let x=Math.max(0,Math.floor(point.x-radius));x<Math.min(heat.width,point.x+radius);x++){
    const distance=Math.hypot(x-point.x,y-point.y)/radius;if(distance>=1)continue;const kernel=Math.pow(1-distance*distance,2),index=y*heat.width+x;
+   eventField[index]+=entries.length*kernel;
    weights.forEach((weight,g)=>{if(weight)fields[g][index]+=weight*kernel});
   }
  }
- const pixels=ctx.createImageData(heat.width,heat.height),strength=contours?new Float32Array(heat.width*heat.height):null,colours=modes.map(g=>sensoryColours[g].slice(1).match(/../g).map(x=>parseInt(x,16)));
- // Keep category colours vivid. Fade only the low-density fringe instead of
- // turning the entire field into a pale haze. The scale stays fixed across filters.
+ const pixels=ctx.createImageData(heat.width,heat.height),colours=modes.map(g=>sensoryColours[g].slice(1).match(/../g).map(x=>parseInt(x,16)));
+ // Every local category contributes. Log weighting keeps minority layers visible;
+ // a bounded chroma lift avoids grey/brown mixtures of complementary pigments.
+ // Intensity changes opacity only, never the counted events or smoothing radius.
  const gain=Math.sqrt(Math.max(0,Math.min(1,(intensity-.4)/1.4))),opacity=dark?.35+.63*gain:.3+.6*gain;
  for(let i=0;i<heat.width*heat.height;i++){
-  let strongest=0,value=0;for(let g=0;g<modes.length;g++)if(fields[g][i]>value){strongest=g;value=fields[g][i]}
-  if(strength)strength[i]=value;
-  if(value<=.1)continue;
+  const value=eventField[i];if(value<=.1)continue;
+  let weight=0,peak=0,chromaSum=0;const rgb=[0,0,0];
+  for(let g=0;g<modes.length;g++){
+   const v=fields[g][i];if(!v)continue;
+   const w=Math.log1p(v),high=Math.max(...colours[g]),low=Math.min(...colours[g]);weight+=w;peak+=high*w;chromaSum+=(high-low)*w;
+   for(let c=0;c<3;c++)rgb[c]+=colours[g][c]*w;
+  }
+  if(!weight)continue;
+  for(let c=0;c<3;c++)rgb[c]/=weight;
+  const hi=Math.max(...rgb),lo=Math.min(...rgb),range=Math.max(1,hi-lo);
+  const chroma=Math.min(range*5,Math.max(range,.85*chromaSum/weight)),ceiling=peak/weight;
   const density=Math.min(1,Math.log1p(value)/Math.log(17)),edge=Math.min(1,(value-.1)/.22),fade=edge*edge*(3-2*edge);
-  const alpha=opacity*fade*(.58+.42*density),lighten=dark?.03+.1*density:.03*density;
-  for(let c=0;c<3;c++)pixels.data[i*4+c]=Math.round(colours[strongest][c]*(1-lighten)+255*lighten);
+  const alpha=opacity*fade*(.52+.48*density),lighten=dark?.06*density:0;
+  for(let c=0;c<3;c++)pixels.data[i*4+c]=Math.round(Math.max(0,Math.min(255,ceiling-(hi-rgb[c])*chroma/range))*(1-lighten)+255*lighten);
   pixels.data[i*4+3]=Math.round(alpha*255);
  }
- ctx.putImageData(pixels,0,0);if(contours)drawHeatContours(ctx,strength,heat.width,heat.height,dark,intensity);if(!map.getPane('heatPane')){const pane=map.createPane('heatPane');pane.style.zIndex='450';pane.style.pointerEvents='none'}L.imageOverlay(heat.toDataURL(),map.getBounds(),{interactive:false,pane:'heatPane',className:'concentration-heat'}).addTo(markers);
+ ctx.putImageData(pixels,0,0);
+ if(contours)for(let g=0;g<modes.length;g++)drawHeatContours(ctx,fields[g],heat.width,heat.height,dark,intensity,sensoryColours[modes[g]]);
+ if(!map.getPane('heatPane')){const pane=map.createPane('heatPane');pane.style.zIndex='450';pane.style.pointerEvents='none'}L.imageOverlay(heat.toDataURL(),map.getBounds(),{interactive:false,pane:'heatPane',className:'concentration-heat'}).addTo(markers);
  // Each hit target stays on its actual supplied source coordinate.
  for(const cell of [...cells.values()].sort((a,b)=>b.entries.length-a.entries.length)){
   const n=cell.entries.length,places=[...new Map(cell.entries.map(x=>{const l=x.r.locations[0];return [l.lat+','+l.lon,l]})).values()],location=[places.reduce((sum,l)=>sum+l.lat,0)/places.length,places.reduce((sum,l)=>sum+l.lon,0)/places.length],diameter=20,hitSize=24;
@@ -257,9 +307,9 @@ function renderEventConcentration(records){
 
 // Marching squares on the same concentration field: nearby peaks form shared
 // contours. Fixed levels keep the overlay comparable when filters change.
-function drawHeatContours(ctx,field,width,height,dark,intensity){
- const step=2,levels=[.25,.5,1,2,4,8,16,32,64];
- ctx.strokeStyle=dark?`rgba(244,235,255,${.18+.24*intensity/1.8})`:'rgba(49,46,73,.35)';ctx.lineWidth=.7;ctx.lineCap='round';ctx.lineJoin='round';
+function drawHeatContours(ctx,field,width,height,dark,intensity,colour){
+ const step=3,levels=[.5,2,8,32,64];
+ ctx.save();ctx.strokeStyle=colour;ctx.globalAlpha=dark?.42+.2*intensity/1.8:.56;ctx.lineWidth=.8;ctx.lineCap='round';ctx.lineJoin='round';
  for(const level of levels){
   ctx.beginPath();
   for(let y=0;y<height-step;y+=step)for(let x=0;x<width-step;x+=step){
@@ -276,6 +326,7 @@ function drawHeatContours(ctx,field,width,height,dark,intensity){
   }
   ctx.stroke();
  }
+ ctx.restore();
 }
 
 function showInspection(view){
@@ -316,9 +367,9 @@ function renderConfigurations(){
   const heading=svgElement('text',{x:cx,y:cy+125,'text-anchor':'middle',class:'constellation-label'});const words=key.split(' + ');words.forEach((word,i)=>{const t=svgElement('tspan',{x:cx,dy:i?'14':'0'});t.textContent=word;heading.append(t)});svg.append(heading);
   const count=svgElement('text',{x:cx,y:cy+5,'text-anchor':'middle',class:'constellation-count'});count.textContent=items.length;
   const golden=Math.PI*(3-Math.sqrt(5));items.forEach(({r,e},i)=>{const radius=23+Math.sqrt((i+1)/items.length)*83,angle=i*golden,x=cx+Math.cos(angle)*radius,y=cy+Math.sin(angle)*radius,colour=eventColour(e);
-   svg.append(svgElement('line',{x1:cx,y1:cy,x2:x,y2:y,stroke:colour,'stroke-width':.55,opacity:.25}));const dot=svgElement('circle',{cx:x,cy:y,r:items.length>300?2.5:3.6,fill:fills.get([...e.groups].sort().join('-')),stroke:selectedEvent?.e.id===e.id&&selectedEvent?.r.key===r.key?'#fff':'none','stroke-width':1.5,tabindex:'0',role:'button','aria-label':`${e.id}: ${e.modalities.join(', ')}`});
+   svg.append(svgElement('line',{x1:cx,y1:cy,x2:x,y2:y,stroke:colour,'stroke-width':.55,opacity:.25}));const dot=svgElement('circle',{cx:x,cy:y,r:items.length>300?2.5:3.6,fill:fills.get([...e.groups].sort().join('-')),stroke:selectedEvent?.e.id===e.id&&selectedEvent?.r.key===r.key?themeToken('text-primary'):'none','stroke-width':1.5,tabindex:'0',role:'button','aria-label':`${e.id}: ${e.modalities.join(', ')}`});
    const title=svgElement('title',{});title.textContent=`${collections[r.collection]} · ${e.id} · ${e.modalities.join(', ')}`;dot.append(title);dot.onclick=()=>chooseEvent(r,e);dot.onkeydown=ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();chooseEvent(r,e)}};svg.append(dot);
-  });svg.append(svgElement('circle',{cx,cy,r:16,fill:'var(--constellation-centre)',stroke:'#7ca99f','stroke-width':1.2}),count);
+  });svg.append(svgElement('circle',{cx,cy,r:16,fill:'var(--constellation-centre)',stroke:themeToken('ui-border'),'stroke-width':1.2}),count);
  }
  container.append(svg);
  const detail=$('#config-event');detail.replaceChildren();if(selectedEvent){const {r,e}=selectedEvent;detail.append(el('p','eyebrow',`${collections[r.collection]} · ${e.id}`),el('p','',e.modalities.join(' + ')),el('blockquote','',e.span),el('p','hint',`Uncertainty: ${e.uncertainty} · ${e.kind}`),button('Read in narrative',()=>{selected=r.key;tab='original';renderReader();showInspection('reader');const info=$('#reader .annotation');if(info)eventInfo(info,[e])}));}else detail.append(el('p','hint','Choose an event on the map or in a constellation.'));
@@ -353,7 +404,7 @@ function renderSensoryComparison(root,entries){
  const table=el('table','count-table'),thead=el('thead'),hr=el('tr');['Collection','Events',...Object.values(modeNames)].forEach(t=>hr.append(el('th','',t)));thead.append(hr);table.append(thead);const tbody=el('tbody');
  for(const [code,name] of Object.entries(collections)){const es=entries.filter(x=>x.r.collection===code),counts=Object.keys(modeNames).map(g=>[g,es.filter(x=>x.e.groups.includes(g)).length]),total=counts.reduce((n,x)=>n+x[1],0),row=el('div','composition-row'),header=el('div','composition-label');header.append(el('strong','',name),el('span','',`${es.length} events · ${total} sensory-category links`));row.append(header);const bar=el('div','composition-bar');bar.setAttribute('aria-label',name+' sensory composition');
   if(!total)bar.append(el('span','no-data','No matching events'));
-  for(const [g,n] of counts){if(!n)continue;const percent=100*n/total,b=button('',()=>{document.querySelectorAll('[name=collection]').forEach(i=>i.checked=i.value===code);configModes=new Set([g]);$('#config-match').value='contains';mapScope=null;researchView='clusters';update()});b.style.width=percent+'%';b.style.backgroundColor=sensoryColours[g];b.style.color=$('#map-palette').value==='dark'?'#102233':'#ffffff';b.title=`${name} · ${modeNames[g]}: ${n} sensory-category links (${percent.toFixed(1)}%)`;b.setAttribute('aria-label',b.title+'. Explore these events');if(percent>=12)b.textContent=Math.round(percent)+'%';bar.append(b)}
+  for(const [g,n] of counts){if(!n)continue;const percent=100*n/total,b=button('',()=>{document.querySelectorAll('[name=collection]').forEach(i=>i.checked=i.value===code);configModes=new Set([g]);$('#config-match').value='contains';mapScope=null;researchView='clusters';update()});b.style.width=percent+'%';b.style.backgroundColor=sensoryColours[g];b.style.setProperty('--segment-label',chartLabelColour(sensoryColours[g]));b.dataset.mode=g;b.title=`${name} · ${modeNames[g]}: ${n} sensory-category links (${percent.toFixed(1)}%)`;b.setAttribute('aria-label',b.title+'. Explore these events');if(percent>=12)b.textContent=Math.round(percent)+'%';bar.append(b)}
   row.append(bar);root.append(row);const tr=el('tr');tr.append(el('th','',name),el('td','',es.length));counts.forEach(([,n])=>tr.append(el('td','',n)));tbody.append(tr);
  }
  table.append(tbody);const axis=el('div','composition-axis');['0%','25%','50%','75%','100%'].forEach(t=>axis.append(el('span','',t)));root.append(axis,el('p','research-note','Only sensory events are counted; unresolved candidates and responses are excluded. Counts describe this pilot selection, not prevalence in a country. Select a segment to inspect its events.'));

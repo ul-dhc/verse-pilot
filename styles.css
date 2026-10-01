@@ -211,3 +211,149 @@ a.brand{color:inherit;text-decoration:none;cursor:pointer}a.brand:hover{color:#4
 
 .heat-controls .heat-contour-toggle{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
 .heat-controls .heat-contour-toggle input{width:16px;height:16px;flex:none;accent-color:#559f98}
+
+/* VERSE Luminous — shared semantic tokens, no layout changes. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-app:#07111F; --bg-secondary:#0B1726; --bg-panel:#0F1D2C; --bg-elevated:#132131;
+  --map-water:#07152B; --map-land:#161D24; --map-border:#293847; --map-border-soft:#1D2A38; --map-label:#83989D;
+  --text-primary:#E7F0EF; --text-secondary:#92A7AA; --text-muted:#6F858A;
+  --ui-border:#314350; --ui-border-soft:#223341; --ui-active:#4FAEFF; --ui-active-secondary:#49D3B6; --ui-hover:#77C8FF; --ui-selected-bg:#13263A;
+  --sens-vision:#E4CF45; --sens-hearing:#9275FF; --sens-bodily:#E778B2; --sens-smell:#F08B62; --sens-taste:#4AD4B6; --sens-space:#53A9FF; --sens-other:#86C9D5;
+  --chart-track:#122132; --chart-separator:#0B1726; --chart-label-dark:#102027; --chart-label-light:#F4F8F9;
+  --event-fill:.22; --event-stroke:.88; --event-width:1.5px; --event-halo:20%; --event-blur:6px;
+  --passage-tint:24%; --passage-vision:#F1DF68; --tooltip-shadow:0 8px 24px #0003;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-app:#F4F8F8; --bg-secondary:#ECF2F2; --bg-panel:#F8FBFB; --bg-elevated:#FFFFFF;
+  --map-water:#DCEBF1; --map-land:#E6ECEA; --map-border:#B8C9CF; --map-border-soft:#D2DEE2; --map-label:#71868B;
+  --text-primary:#203638; --text-secondary:#5F767A; --text-muted:#7E9296;
+  --ui-border:#B8C9CF; --ui-border-soft:#D2DEE2; --ui-active:#2E88D8; --ui-active-secondary:#1EA287; --ui-hover:#5AAEF3; --ui-selected-bg:#E3F0F8;
+  --sens-vision:#B8A11E; --sens-hearing:#7359E0; --sens-bodily:#C95C97; --sens-smell:#D9734F; --sens-taste:#1CA58A; --sens-space:#347FD6; --sens-other:#6D9EAD;
+  --chart-track:#E7EEEE; --chart-separator:#F8FBFB; --chart-label-dark:#1B2F32; --chart-label-light:#FFFFFF;
+  --event-fill:.26; --event-stroke:.78; --event-width:1.3px; --event-halo:9%; --event-blur:4px;
+  --passage-tint:21%; --passage-vision:#F6E98D; --tooltip-shadow:0 6px 20px #20363812;
+}
+:root[data-theme] {
+  --ink:var(--text-primary); --muted:var(--text-secondary); --line:var(--ui-border-soft); --paper:var(--bg-panel); --bg:var(--bg-app);
+  --vision:var(--passage-vision);
+  --hearing:color-mix(in srgb,var(--sens-hearing) var(--passage-tint),var(--bg-panel));
+  --body:color-mix(in srgb,var(--sens-bodily) var(--passage-tint),var(--bg-panel));
+  --smell:color-mix(in srgb,var(--sens-smell) var(--passage-tint),var(--bg-panel));
+  --taste:color-mix(in srgb,var(--sens-taste) var(--passage-tint),var(--bg-panel));
+  --orientation:color-mix(in srgb,var(--sens-space) var(--passage-tint),var(--bg-panel));
+  --other:color-mix(in srgb,var(--sens-other) var(--passage-tint),var(--bg-panel));
+}
+html[data-theme] body{background:var(--bg-app);color:var(--text-primary)}
+html[data-theme] :is(header,.active-filter-bar,.reader,.inspection,.metadata-panel,dialog,.skip){background:var(--bg-panel);color:var(--text-primary);border-color:var(--ui-border-soft)}
+html[data-theme] :is(.filters,.corpus-line){background:var(--bg-app);color:var(--text-primary);border-color:var(--ui-border-soft)}
+html[data-theme] .map-panel,html[data-theme] #configuration{background:var(--bg-app);color:var(--text-primary)}
+html[data-theme] #configuration{--constellation-centre:var(--bg-secondary)}
+html[data-theme] :is(.identity .research-label,.pilot-notice){background:var(--bg-secondary);color:var(--text-secondary);border-color:var(--ui-border-soft)}
+html[data-theme] .identity .research-label{color:var(--text-primary)}
+html[data-theme] :is(.pilot-label,.map-head h2,.language-heading){color:var(--text-primary)}
+html[data-theme] :is(.hint,.map-note,.map-legend,.map-actions,.map-palette-label,.event-map-controls,.heat-controls,.legend,.research-note,.research-legend,.control-label,.match-help,.config-caption,.config-header .eyebrow,.config-header>p:last-child,.flow-toolbar span,.flow-selection-status,.no-filters,.metadata-stats,.density-caption span,.flow-tip-record,.flow-tip-position){color:var(--text-secondary)}
+html[data-theme] :is(.composition-label span,.composition-axis,.density-summary span,.density-method,.sensory-filter-disclosure>summary span){opacity:1;color:var(--text-secondary)}
+html[data-theme] :is(input[type=search],select){background:var(--bg-elevated);color:var(--text-primary);border-color:var(--ui-border);border-radius:8px}
+html[data-theme] input::placeholder{color:var(--text-secondary);opacity:1}
+html[data-theme] input:is([type=checkbox],[type=range]){accent-color:var(--ui-active)}
+html[data-theme] :is(button,input,select,summary,a.brand,[role=button]):focus-visible{outline:2px solid var(--ui-active);outline-offset:3px}
+html[data-theme] a{color:var(--ui-active)}
+html[data-theme] a.brand{color:var(--text-primary)}
+html[data-theme] a.brand:hover{color:var(--ui-hover)}
+/* Restrained controls; explicit active borders and check marks supplement colour. */
+html[data-theme] button:not(.density-row):not(.composition-bar button),
+html[data-theme] #configuration button:not(.density-row):not(.composition-bar button){background:transparent;color:var(--text-secondary);border-color:var(--ui-border);box-shadow:none}
+html[data-theme] button:not(.density-row):not(.composition-bar button):not(:disabled):is(:hover,:focus-visible),
+html[data-theme] #configuration button:not(.density-row):not(.composition-bar button):not(:disabled):is(:hover,:focus-visible){background:var(--ui-selected-bg);color:var(--text-primary);border-color:var(--ui-hover);box-shadow:none}
+html[data-theme] button:is([aria-pressed=true],.active):not(.density-row):not(.composition-bar button),
+html[data-theme] #configuration button[aria-pressed=true]:not(.density-row):not(.composition-bar button){background:var(--ui-selected-bg);border-color:var(--ui-active);color:var(--text-primary);box-shadow:none}
+html[data-theme] :is(.map-view-controls>button,.inspection-tabs button,nav button,.config-segment button){border:1px solid transparent}
+html[data-theme] :is(.research-view-tabs button,#clear-all-filters,#clear-tools-filters,#reset){border:1px solid var(--ui-border)}
+html[data-theme] :is(#clear-all-filters,#clear-tools-filters,#reset):not(:disabled){background:var(--ui-selected-bg);border-color:var(--ui-active);color:var(--text-primary)}
+html[data-theme] button:disabled,html[data-theme] #configuration button:disabled{background:transparent;color:var(--text-muted);border-color:var(--ui-border-soft);opacity:.65;box-shadow:none}
+html[data-theme] :is(.map-view-controls,.config-controls,.config-event,.flow-detail,.density-summary,.density-caption,.density-method,.count-table td,.count-table th){border-color:var(--ui-border-soft)}
+html[data-theme] :is(.config-segment,.sensory-filter-disclosure){background:transparent;border-color:var(--ui-border)}
+html[data-theme] .sensory-filter-disclosure>summary:hover{background:var(--ui-selected-bg)}
+html[data-theme] .sensory-filter-disclosure[open]>summary{border-color:var(--ui-border-soft)}
+html[data-theme] #config-canvas{border-color:var(--ui-border-soft)}
+html[data-theme] #active-filter-count{background:var(--ui-selected-bg);color:var(--text-primary)}
+html[data-theme] .filters .check:has(input:checked){background:var(--ui-selected-bg);color:var(--text-primary)}
+html[data-theme] .density-caption{background:var(--bg-app)}
+/* Category colour is consistent in the sidebar, graphs, map and text. */
+html[data-theme] .filters [name=mode]~.dot{background:var(--category);border-color:color-mix(in srgb,var(--category) 80%,var(--text-primary))}
+html[data-theme] .filters [value=vision]~.dot{--category:var(--sens-vision)}
+html[data-theme] .filters [value=hearing]~.dot{--category:var(--sens-hearing)}
+html[data-theme] .filters [value=body]~.dot{--category:var(--sens-bodily)}
+html[data-theme] .filters [value=smell]~.dot{--category:var(--sens-smell)}
+html[data-theme] .filters [value=taste]~.dot{--category:var(--sens-taste)}
+html[data-theme] .filters [value=orientation]~.dot{--category:var(--sens-space)}
+html[data-theme] .filters [value=other]~.dot{--category:var(--sens-other)}
+html[data-theme] #configuration .config-modes button,html[data-theme] .map-legend .heat-category{background:transparent;border:1px solid var(--ui-border);color:var(--text-secondary);box-shadow:none}
+html[data-theme] #configuration .config-modes button[aria-pressed=true],html[data-theme] .map-legend .heat-category[aria-pressed=true]{background:color-mix(in srgb,var(--mode-colour) 8%,transparent);border-color:var(--mode-colour);color:var(--text-primary);box-shadow:none}
+html[data-theme] .heat-category[aria-pressed=true]:after{content:'✓';font-size:11px}
+html[data-theme] .map-legend b{border-color:color-mix(in srgb,var(--text-primary) 18%,transparent)}
+html[data-theme] :is(.research-legend i,.map-legend b){width:9px;height:9px}
+/* Luminous cartography. Geography stays quiet; events retain their full count. */
+html[data-theme] #corpus-map{background:var(--map-water);border-color:var(--map-border);box-shadow:none}
+html[data-theme] .country-label{color:var(--map-label);font-size:11px;font-weight:600;text-shadow:0 1px 2px var(--map-water);letter-spacing:1.6px}
+html[data-theme] .leaflet-bar{border-color:var(--ui-border)!important;box-shadow:none!important}
+html[data-theme] .leaflet-bar a{background:var(--bg-elevated);color:var(--text-primary)!important;border-color:var(--ui-border-soft)!important}
+html[data-theme] .leaflet-bar a:hover{background:var(--ui-selected-bg)}
+html[data-theme] .leaflet-control-attribution{background:color-mix(in srgb,var(--bg-panel) 90%,transparent)!important;color:var(--text-secondary)!important}
+html[data-theme] .leaflet-control-attribution a{color:var(--text-secondary)}
+html[data-theme] .event-map-dot{overflow:visible}
+.event-glyph{display:block;overflow:visible;pointer-events:none;filter:drop-shadow(0 0 var(--event-blur) color-mix(in srgb,var(--event-colour) var(--event-halo),transparent))}
+.event-glyph .event-fill{fill-opacity:var(--event-fill)}
+.event-glyph .event-edge{fill:none;stroke-opacity:var(--event-stroke);stroke-width:var(--event-width)}
+.event-glyph .selection-ring{fill:none;stroke:var(--text-primary);stroke-width:1.4;opacity:0}
+.event-map-dot:is(:hover,:focus-visible,.is-selected) .event-fill{fill-opacity:.46}
+.event-map-dot:is(:hover,:focus-visible,.is-selected) .event-edge{stroke-opacity:1;stroke-width:1.8}
+.event-map-dot:is(:hover,:focus-visible,.is-selected) .selection-ring{opacity:1}
+html[data-theme] .event-map-dot:focus-visible{outline:0}
+html[data-theme] .map-context-dot .event-glyph{filter:none}
+html[data-theme] .ambient-marker{border-color:var(--ui-border);box-shadow:none}
+html[data-theme] .ambient-marker .marker-core{background:color-mix(in srgb,var(--bg-panel) 78%,transparent);color:var(--text-primary)}
+html[data-theme] .ambient-marker:is(.selected,:hover){outline:2px solid var(--ui-active);outline-offset:3px;box-shadow:none}
+/* Flat comparison bars: direct pigments, precise boundaries, computed label contrast. */
+html[data-theme] .composition-bar{background:var(--chart-track);border-radius:8px}
+html[data-theme] #configuration .composition-bar button,
+html[data-theme] #configuration .composition-bar button:is(:hover,:focus-visible){color:var(--segment-label);opacity:1;background-image:none;filter:none;text-shadow:none;box-shadow:none;border:0;border-right:1px solid var(--chart-separator);border-radius:0}
+html[data-theme] #configuration .composition-bar button:last-child{border-right:0}
+html[data-theme] #configuration .composition-bar button:is(:hover,:focus-visible){outline:2px solid var(--segment-label);outline-offset:-3px}
+html[data-theme] .density-bar,html[data-theme] .density-bar>span{background-image:none;filter:none}
+html[data-theme] .density-bar{opacity:.86}
+html[data-theme] .density-bar>span+span{border-left:1px solid var(--chart-separator)}
+html[data-theme] .density-list.has-selection .density-bar{opacity:.35}
+html[data-theme] .density-row:is(:hover,:focus-visible,.is-selected) .density-bar{opacity:1;filter:none}
+html[data-theme] .density-row.is-selected:before{background:var(--ui-active)}
+html[data-theme] .flow-strand circle{opacity:.62}
+html[data-theme] .flow-strand.flow-focused circle{opacity:1}
+html[data-theme] .flow-strand .flow-string{opacity:.25}
+html[data-theme] .flow-strand.flow-focused .flow-string{opacity:1}
+html[data-theme] :is(.flow-svg,.configuration-svg) circle[role=button]:is(:hover,:focus){stroke:var(--text-primary)}
+/* Tooltip and reader surfaces use the same cool-neutral system. */
+html[data-theme] #corpus-map .leaflet-tooltip,html[data-theme] .flow-tooltip{background:color-mix(in srgb,var(--bg-elevated) 96%,transparent);border-color:var(--ui-border);color:var(--text-primary);box-shadow:var(--tooltip-shadow);backdrop-filter:blur(8px)}
+html[data-theme] #corpus-map .leaflet-tooltip:before{border-top-color:var(--ui-border)}
+html[data-theme] .annotation{background:var(--bg-secondary);border-color:var(--ui-border-soft);border-radius:10px}
+/* Yellow needs a light pigment and dark ink: blending it into navy turns it olive. */
+html[data-theme] :is(.narrative mark[data-modes~="vision"],.chip[data-mode="vision"]){color:var(--chart-label-dark)}
+html[data-theme] .legend .dot[data-mode="vision"]{background:var(--sens-vision)}
+/* Keep both category stripes readable when a yellow passage overlaps another mode. */
+html[data-theme] .narrative mark.multi[data-modes~="vision"]{
+  --hearing:color-mix(in srgb,var(--sens-hearing) 38%,white);
+  --body:color-mix(in srgb,var(--sens-bodily) 38%,white);
+  --smell:color-mix(in srgb,var(--sens-smell) 38%,white);
+  --taste:color-mix(in srgb,var(--sens-taste) 38%,white);
+  --orientation:color-mix(in srgb,var(--sens-space) 38%,white);
+  --other:color-mix(in srgb,var(--sens-other) 38%,white);
+}
+html[data-theme] .narrative mark.chosen{outline-color:var(--ui-active);box-shadow:none}
+html[data-theme] .translation-block .language-heading{color:var(--text-primary)}
+html[data-theme] .translation-block .translation-status{background:color-mix(in srgb,var(--sens-smell) 12%,var(--bg-panel));border-color:var(--sens-smell);color:var(--text-primary);border-radius:8px}
+html[data-theme] :is(#clear-all-filters,#clear-tools-filters,#reset):disabled{background:transparent;color:var(--text-muted);border-color:var(--ui-border-soft);box-shadow:none;opacity:.65}
+html[data-theme] #configuration #config-modes button[aria-pressed=true],
+html[data-theme] #map-legend .heat-category[aria-pressed=true]{background:color-mix(in srgb,var(--mode-colour) 8%,transparent);border-color:var(--mode-colour);color:var(--text-primary);box-shadow:none}
+html[data-theme] #configuration #clear-tools-filters:not(:disabled){background:var(--ui-selected-bg);border-color:var(--ui-active);color:var(--text-primary);box-shadow:none}
+html[data-theme] #configuration #clear-tools-filters:not(:disabled):is(:hover,:focus-visible){background:var(--ui-selected-bg);border-color:var(--ui-hover);color:var(--text-primary);box-shadow:none}
