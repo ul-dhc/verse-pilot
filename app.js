@@ -353,11 +353,32 @@ function renderEventFlow(root,entries){
   const stops=[];for(const point of points){const pos=(point.x-first.x)/Math.max(1,last.x-first.x);point.e.groups.forEach((g,i)=>stops.push({offset:Math.max(0,Math.min(1,pos+(i-(point.e.groups.length-1)/2)*.002)),colour:sensoryColours[g]}))}stops.sort((a,b)=>a.offset-b.offset).forEach(s=>gradient.append(svgElement('stop',{offset:s.offset,'stop-color':s.colour})));defs.append(gradient);
   if(points.length>1){let d=`M ${first.x} ${first.y}`;for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],mid=(a.x+b.x)/2;d+=` C ${mid} ${a.y} ${mid} ${b.y} ${b.x} ${b.y}`}group.append(svgElement('path',{d,fill:'none',stroke:`url(#${id})`,class:'flow-string','stroke-width':1.05,'pointer-events':'none'}))}
   for(const p of points){let fill=eventColour(p.e);if(p.e.groups.length>1){const dotId=`${id}-${p.e.id}`,dg=svgElement('linearGradient',{id:dotId,x1:0,y1:0,x2:1,y2:1});p.e.groups.forEach((g,i)=>{dg.append(svgElement('stop',{offset:i/p.e.groups.length,'stop-color':sensoryColours[g]}),svgElement('stop',{offset:(i+1)/p.e.groups.length,'stop-color':sensoryColours[g]}))});defs.append(dg);fill=`url(#${dotId})`}
-   const dot=svgElement('circle',{cx:p.x,cy:p.y,r:2.8,fill,stroke:'transparent','stroke-width':4,tabindex:'0',role:'button','data-event':p.e.id,'aria-label':`${r.id} · ${p.e.id} · ${p.e.modalities.join(', ')}. Highlight this narrative`}),title=svgElement('title',{});title.textContent=`${r.id} · ${p.e.modalities.join(', ')} · ${Math.round((p.x-x0)/(x1-x0)*100)}% through text`;dot.append(title);
+   const dot=svgElement('circle',{cx:p.x,cy:p.y,r:2.8,fill,stroke:'transparent','stroke-width':4,tabindex:'0',role:'button','data-event':p.e.id,'aria-label':`${r.id} · ${p.e.id} · ${p.e.modalities.join(', ')}. Highlight this narrative`});
    const select=()=>{flowSelected=r.key;chooseEvent(r,p.e)};hitTargets.push({dot,r,e:p.e,x:p.x,y:p.y,select});dot.onclick=select;dot.onkeydown=ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();select()}};group.append(dot);
   }svg.append(group);
  }
  for(const [x,t] of [[x0,'Beginning'],[(x0+x1)/2,'Position in original text'],[x1,'End']]){const label=svgElement('text',{x,y:t==='Position in original text'?456:426,'text-anchor':x===x0?'start':x===x1?'end':'middle',class:'flow-lane-label'});label.textContent=t;svg.append(label)}
+ // An HTML tooltip replaces native SVG titles; it never intercepts point clicks.
+ const chart=el('div','flow-chart'),tooltip=el('div','flow-tooltip'),tipHeading=el('div','flow-tip-heading'),tipSwatch=el('i','flow-tip-swatch'),tipModes=el('strong'),tipRecord=el('div','flow-tip-record'),tipPosition=el('div','flow-tip-position');
+ tooltip.id='flow-event-tooltip';tooltip.setAttribute('role','tooltip');tooltip.hidden=true;
+ tipHeading.append(tipSwatch,tipModes);tooltip.append(tipHeading,tipRecord,tipPosition);chart.append(svg,tooltip);
+ let tooltipHit=null,dismissedHit=null;
+ function hideTooltip(){tooltipHit?.dot.removeAttribute('aria-describedby');tooltipHit=null;tooltip.hidden=true}
+ function showTooltip(hit){
+  if(!hit||hit===dismissedHit){hideTooltip();return}
+  if(hit!==tooltipHit){
+   hideTooltip();tooltipHit=hit;hit.dot.setAttribute('aria-describedby',tooltip.id);
+   tipSwatch.style.background=eventGradient(hit.e);tipModes.textContent=hit.e.groups.map(g=>modeNames[g]).join(' · ');
+   tipRecord.textContent=`${collections[hit.r.collection]} · ${hit.r.id}`;
+   tipPosition.textContent=`${Math.round((hit.x-x0)/(x1-x0)*100)}% through text`;
+  }
+  tooltip.hidden=false;
+  const frame=chart.getBoundingClientRect(),point=hit.dot.getBoundingClientRect(),width=tooltip.offsetWidth,height=tooltip.offsetHeight;
+  const left=Math.max(8,Math.min(frame.width-width-8,point.left+point.width/2-frame.left-width/2));
+  let top=point.bottom-frame.top+12;
+  if(top+height>Math.min(frame.height,window.innerHeight-frame.top)-8)top=point.top-frame.top-height-12;
+  tooltip.style.left=left+'px';tooltip.style.top=Math.max(8,top)+'px';
+ }
  // Keep SVG nodes in place during hover so overlapping points remain clickable.
  let hoveredKey=null;
  function hitAt(ev){
@@ -367,17 +388,20 @@ function renderEventFlow(root,entries){
  }
  svg.addEventListener('pointermove',ev=>{
   if(ev.pointerType==='touch')return;
-  const key=hitAt(ev)?.r.key||null;
+  const hit=hitAt(ev),key=hit?.r.key||null;
+  if(hit!==dismissedHit)dismissedHit=null;
   if(key!==hoveredKey){hoveredKey=key;focus(key||flowSelected)}
+  showTooltip(hit);
  });
- svg.addEventListener('pointerleave',()=>{hoveredKey=null;focus(flowSelected)});
- svg.addEventListener('focusin',ev=>{const hit=hitTargets.find(t=>t.dot===ev.target);if(hit)focus(hit.r.key)});
- svg.addEventListener('focusout',()=>focus(hoveredKey||flowSelected));
+ svg.addEventListener('pointerleave',()=>{hoveredKey=null;dismissedHit=null;hideTooltip();focus(flowSelected)});
+ svg.addEventListener('focusin',ev=>{const hit=hitTargets.find(t=>t.dot===ev.target);if(hit){dismissedHit=null;focus(hit.r.key);showTooltip(hit)}});
+ svg.addEventListener('focusout',()=>{hideTooltip();focus(hoveredKey||flowSelected)});
+ svg.addEventListener('keydown',ev=>{if(ev.key==='Escape'){dismissedHit=tooltipHit;hideTooltip()}});
  svg.addEventListener('click',ev=>{
   const hit=hitAt(ev);
   if(hit){ev.preventDefault();ev.stopImmediatePropagation();hit.select()}
  },true);
- root.append(svg,el('p','research-note',`${filtered.length-records.length} narratives in the current selection have no matching sensory events. Single-event narratives appear as dots. Each event is positioned at the start of its first evidence passage, even when it has several passages. Position is not elapsed time or causation; small vertical offsets separate overlapping strands.`),detail);
+ root.append(chart,el('p','research-note',`${filtered.length-records.length} narratives in the current selection have no matching sensory events. Single-event narratives appear as dots. Each event is positioned at the start of its first evidence passage, even when it has several passages. Position is not elapsed time or causation; small vertical offsets separate overlapping strands.`),detail);
  if(flowSelected){const list=byRecord.get(flowSelected);showDetail(list[0].r,list.find(x=>x.e.id===selectedEvent?.e.id)?.e||list[0].e)}else detail.append(el('p','research-note','Select a point on any sensory axis to highlight its strand and read the passage.'));focus(flowSelected);
 }
 
