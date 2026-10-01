@@ -6,8 +6,8 @@ const modeNames={vision:'Vision',hearing:'Hearing',body:'Bodily experience',smel
 const langs={LV:'lv',NO:'no',FI:'fi',SE:'sv'};
 let map,mapReady=false,mapScope=null,markers,baseTiles;
 const collectionColours={LV:'#b6a3cc',NO:'#97bcae',FI:'#d6b796',SE:'#9ebacf'};
-const sensoryColours={vision:'#4fd1bd',hearing:'#4b9fff',body:'#dc94b2',smell:'#d9a877',taste:'#d9ba48',orientation:'#b19add',other:'#25bfd3'};
-const sensoryPalettes={dark:{...sensoryColours},light:{vision:'#087d70',hearing:'#2169bf',body:'#ae648a',smell:'#956e37',taste:'#887018',orientation:'#7955aa',other:'#087c90'}};
+const sensoryColours={vision:'#d9ba48',hearing:'#4b9fff',body:'#dc94b2',smell:'#d9a877',taste:'#4fd1bd',orientation:'#b19add',other:'#25bfd3'};
+const sensoryPalettes={dark:{...sensoryColours},light:{vision:'#887018',hearing:'#2169bf',body:'#ae648a',smell:'#956e37',taste:'#087d70',orientation:'#7955aa',other:'#087c90'}};
 let mapView='senses',countryLayer,selectedEvent=null;
 let densitySort='density',densityShowAll=true,densitySelected=null;
 document.addEventListener('click',ev=>{if(densitySelected&&!ev.target.closest('.density-list')){densitySelected=null;document.querySelector('.density-list')?.classList.remove('has-selection');document.querySelectorAll('.density-row.is-selected').forEach(row=>{row.classList.remove('is-selected');row.setAttribute('aria-pressed','false')});const caption=document.querySelector('.density-caption');if(caption){caption.querySelector('strong').textContent='Explore the weave';caption.querySelector('span').textContent='Hover or focus a strand to inspect a narrative · click to read'}}},true);
