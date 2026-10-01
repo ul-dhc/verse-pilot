@@ -188,3 +188,6 @@ a.brand{color:inherit;text-decoration:none;cursor:pointer}a.brand:hover{color:#4
 .narrative mark.candidate-mark{border-bottom:2px dashed #8a7b54}
 .annotation>div+div{margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--line,#ced8da)}
 .annotation dl{display:grid;grid-template-columns:minmax(100px,1fr) 2fr;gap:.5rem 1rem;font-size:.9rem}.annotation dd{margin:0}.annotation dt{text-transform:capitalize}
+
+.event-map-dot.is-selected span{opacity:1;outline:2px solid #fff;outline-offset:2px;transform:scale(1.35)}
+#corpus-map:not(.night) .event-map-dot.is-selected span{outline-color:#294b60}
