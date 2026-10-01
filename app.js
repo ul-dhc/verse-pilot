@@ -12,21 +12,20 @@ let mapView='senses',countryLayer,selectedEvent=null;
 let densitySort='density',densityShowAll=true,densitySelected=null;
 document.addEventListener('click',ev=>{if(densitySelected&&!ev.target.closest('.density-list')){densitySelected=null;document.querySelector('.density-list')?.classList.remove('has-selection');document.querySelectorAll('.density-row.is-selected').forEach(row=>{row.classList.remove('is-selected');row.setAttribute('aria-pressed','false')});const caption=document.querySelector('.density-caption');if(caption){caption.querySelector('strong').textContent='Explore the weave';caption.querySelector('span').textContent='Hover or focus a strand to inspect a narrative · click to read'}}},true);
 let configModes=new Set(Object.keys(modeNames)),eventMarks='events',researchView='comparison',flowSelected=null;
-let selected='LV:130801007',page=0,tab='original',highlight=true,filtered=DATA;
+let selected='LV:130801007',tab='original',highlight=true,filtered=DATA;
 let showResponses=false,showCandidates=false;
 function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
 function tone(node,g){node.style.setProperty('--tone',`var(--${g})`);return node}
 function chip(text,g){return tone(el('span','chip',text),g||'other')}
 function button(text,action){const b=el('button','',text);b.type='button';b.onclick=action;return b}
-function check(container,value,label,count,group){const l=el('label','check'),i=el('input');i.type='checkbox';i.value=value;i.name=group;i.onchange=()=>{page=0;mapScope=null;update()};l.append(i);if(group==='mode')l.append(tone(el('span','dot'),value));l.append(document.createTextNode(label));if(count!==undefined)l.append(el('span','count',count));container.append(l)}
+function check(container,value,label,count,group){const l=el('label','check'),i=el('input');i.type='checkbox';i.value=value;i.name=group;i.onchange=()=>{mapScope=null;update()};l.append(i);if(group==='mode')l.append(tone(el('span','dot'),value));l.append(document.createTextNode(label));if(count!==undefined)l.append(el('span','count',count));container.append(l)}
 Object.entries(collections).forEach(([k,v])=>check($('#collections'),k,v,150,'collection'));
 Object.entries(modeNames).forEach(([k,v])=>check($('#modes'),k,v,undefined,'mode'));
 function legend(parent){const l=el('div','legend');Object.entries(modeNames).forEach(([g,name])=>{const s=el('span');s.append(tone(el('i','dot'),g),document.createTextNode(name));l.append(s)});parent.append(l)}
 function defaultSensorySelection(){return $('#config-match').value==='any'&&configModes.size===Object.keys(modeNames).length}
 function resetSensorySelection(){configModes=new Set(Object.keys(modeNames));$('#config-match').value='any'}
 function applyFilters(ignoreCollection=false){const cs=[...document.querySelectorAll('[name=collection]:checked')].map(x=>x.value),ms=[...document.querySelectorAll('[name=mode]:checked')].map(x=>x.value),q=$('#search').value.toLocaleLowerCase().trim(),u=$('#uncertainty').value;return DATA.filter(r=>(ignoreCollection||!cs.length||cs.includes(r.collection))&&(!ms.length||r.groups.some(g=>ms.includes(g)))&&(!$('#translated').checked||r.translation)&&(!q||`${r.id} ${r.title} ${r.text} ${r.translation}`.toLocaleLowerCase().includes(q))&&(!u||(u==='none'?!r.events.some(e=>['yes','unclear'].includes(e.uncertainty)):r.events.some(e=>e.uncertainty===u)))&&(defaultSensorySelection()||matchingEvents(r).length>0))}
-function update(){const candidates=applyFilters();filtered=mapScope==='unmapped'?candidates.filter(r=>!r.locations.length):mapScope instanceof Set?candidates.filter(r=>mapScope.has(r.key)):candidates;$('#result-count').textContent=filtered.length;$('#result-detail').textContent=`${filtered.filter(r=>r.translation).length} with English translation`;if(!filtered.some(r=>r.key===selected))selected=filtered[0]?.key;renderResults();renderReader();if(mapReady)renderMap(candidates);renderConfigurations();renderActiveFilters()}
-function renderResults(){const list=$('#results-list');list.replaceChildren();const pages=Math.max(1,Math.ceil(filtered.length/8));page=Math.min(page,pages-1);for(const r of filtered.slice(page*8,page*8+8)){const b=button('',()=>{selected=r.key;renderResults();renderReader();showInspection('reader');if(mapReady)renderMap(applyFilters());if(innerWidth<851)$('#reader').scrollIntoView({behavior:'smooth',block:'start'})});b.className='result'+(selected===r.key?' selected':'');b.setAttribute('aria-current',selected===r.key?'true':'false');const m=el('div','meta',`${collections[r.collection].toUpperCase()} · ${r.id}`);if(r.translation)m.append(el('span','translated-badge','EN'));b.append(m,el('strong','',r.title));const modes=el('div','modes-line');r.groups.forEach(g=>modes.append(tone(el('span','dot'),g)));modes.append(document.createTextNode(r.groups.map(g=>modeNames[g]).join(' · ')||'No included sensory events'));b.append(modes);list.append(b)}if(!filtered.length)list.append(el('p','empty','No narratives match these filters. Try Reset or a different search.'));$('#page-label').textContent=`${page+1} / ${pages}`;$('#prev-page').disabled=page===0;$('#next-page').disabled=page>=pages-1}
+function update(){const candidates=applyFilters();filtered=mapScope==='unmapped'?candidates.filter(r=>!r.locations.length):mapScope instanceof Set?candidates.filter(r=>mapScope.has(r.key)):candidates;if(!filtered.some(r=>r.key===selected))selected=filtered[0]?.key;renderReader();if(mapReady)renderMap(candidates);renderConfigurations();renderActiveFilters()}
 function annotationSpans(e){return e.spans||[{start:e.start,end:e.end,span:e.span}]}
 function eventInfo(parent,events){
  parent.replaceChildren();parent.hidden=false;
@@ -95,7 +94,7 @@ function translation(r,parent){
 function contexts(r,parent){const section=el('div','context');section.append(el('h3','', 'Narrative context'));const dl=el('dl');for(const [k,label] of [['place','Place'],['time','Time'],['movement','Movement']]){dl.append(el('dt','',label),el('dd','',r.context[k]||'Not coded'))}section.append(dl,el('p','hint','Contexts recorded for sensory events. Event details show their supporting evidence.'));parent.append(section)}
 function source(r,parent){parent.append(el('h3','', 'Source reference'),el('p','',r.source||'No source reference supplied for this record.'),el('p','',`Record: ${r.id} · ${collections[r.collection]}`),el('p','',`Source category: ${r.category||'Not supplied'}`));for(const loc of r.locations||[])parent.append(el('p','',`Map: ${loc.label} · ${loc.precision}. ${loc.provenance}`));if(r.place)parent.append(el('p','',`Collection place: ${r.place}`));if(r.annotationNote)parent.append(el('p','',`Annotation note: ${r.annotationNote}`));parent.append(el('p','hint','Source categories and collection places are metadata, not inferred narrative identities or event locations.'))}
 function renderReader(){renderMetadata();const parent=$('#reader');parent.replaceChildren();const r=DATA.find(x=>x.key===selected);if(!r){parent.append(el('p','empty','Select different filters to browse the collection.'));return}const top=el('div','reader-top');top.append(el('p','eyebrow',`${collections[r.collection].toUpperCase()} COLLECTION · ${r.id}`));parent.append(top,el('h1','',r.title),el('div','reader-meta',`${r.events.length} sensory events · ${r.translation?'English translation available':'Original language'}`));const chips=el('div','chips');r.groups.forEach(g=>chips.append(chip(modeNames[g],g)));parent.append(chips);const tabs=el('div','tabs');for(const [id,label] of [['original','Text'],['source','Source information']]){const b=button(label,()=>{tab=id;renderReader()});b.className=tab===id?'active':'';b.setAttribute('aria-pressed',String(tab===id));tabs.append(b)}parent.append(tabs);if(tab==='original'){const row=el('div','toggle-row');row.append(el('span','hint','Select a highlighted passage to inspect its annotation.'));const label=el('label'),input=el('input');input.type='checkbox';input.checked=highlight;input.onchange=()=>{highlight=input.checked;renderReader()};label.append(input,document.createTextNode('Highlight'));row.append(label);parent.append(row);annotationLayers(r,parent);legend(parent);parent.append(el('h3','language-heading','Original'));original(r,parent);translation(r,parent);contexts(r,parent)}else if(tab==='english')translation(r,parent);else source(r,parent)}
-$('#search').oninput=()=>{page=0;mapScope=null;update()};$('#uncertainty').onchange=$('#translated').onchange=()=>{page=0;mapScope=null;update()};$('#reset').onclick=clearAllFilters;$('#prev-page').onclick=()=>{page--;renderResults()};$('#next-page').onclick=()=>{page++;renderResults()};$('#browse').onclick=()=>{$('#corpus-map').scrollIntoView({behavior:'smooth',block:'center'});if(mapReady)map.invalidateSize()};$('#about').onclick=()=>$('#about-dialog').showModal();$('#close-about').onclick=()=>$('#about-dialog').close();initConfigurations();initMap();update();
+$('#search').oninput=()=>{mapScope=null;update()};$('#uncertainty').onchange=$('#translated').onchange=()=>{mapScope=null;update()};$('#reset').onclick=clearAllFilters;$('#browse').onclick=()=>{$('#corpus-map').scrollIntoView({behavior:'smooth',block:'center'});if(mapReady)map.invalidateSize()};$('#about').onclick=()=>$('#about-dialog').showModal();$('#close-about').onclick=()=>$('#about-dialog').close();initConfigurations();initMap();update();
 
 $("#corpus-summary").textContent = `${DATA.length} narratives · ${new Set(DATA.map(r=>r.collection)).size} collections · ${DATA.filter(r=>r.translation).length} English translations`;
 function initMap(){
@@ -118,12 +117,12 @@ function initMap(){
   if(ev.originalEvent?.target.closest('.leaflet-interactive,.leaflet-marker-icon,.leaflet-control'))return;
   if(!selectedEvent&&!flowSelected&&!densitySelected&&!(mapScope instanceof Set))return;
   selectedEvent=null;flowSelected=null;densitySelected=null;
-  if(mapScope instanceof Set){mapScope=null;page=0}
+  if(mapScope instanceof Set){mapScope=null}
   update();
  });
  $('#fit-map').onclick=()=>{const pts=applyFilters().flatMap(r=>r.locations.map(l=>[l.lat,l.lon]));if(pts.length)map.fitBounds(pts,{padding:[35,35],maxZoom:9})};
- $('#all-locations').onclick=()=>{mapScope=null;page=0;update()};
- $('#unmapped').onclick=()=>{mapScope='unmapped';page=0;update()};
+ $('#all-locations').onclick=()=>{mapScope=null;update()};
+ $('#unmapped').onclick=()=>{mapScope='unmapped';update()};
  $('#detailed-map').onchange=()=>{if($('#detailed-map').checked){if(location.protocol==='file:'){$('#detailed-map').checked=false;$('#map-status').textContent='The detailed basemap is available in the local preview or on GitHub Pages. The overview works offline.';return}baseTiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);baseTiles.on('tileerror',()=>{$('#map-status').textContent='Detailed tiles could not load. Turn off the detailed basemap to use the built-in overview.'})}else if(baseTiles)map.removeLayer(baseTiles)};
 }
 function renderMap(records){
@@ -158,7 +157,7 @@ function renderMap(records){
   const tip=el('div');tip.append(el('strong','',`${count} narrative${count===1?'':'s'}`),el('div','',[...new Set(items.map(i=>i.loc.label))].slice(0,3).join(', ')));
   if(mapView==='senses')tip.append(el('div','',tally.map(([g,n])=>`${modeNames[g]} ${n}`).join(' · ')));
   if(approx)tip.append(el('div','', 'Approximate / regional reference'));
-  marker.getElement().setAttribute('aria-label',marker.options.title);marker.getElement().removeAttribute('title');marker.bindTooltip(tip);marker.on('click',()=>{mapScope=new Set(unique.map(r=>r.key));page=0;selected=unique[0].key;update()});
+  marker.getElement().setAttribute('aria-label',marker.options.title);marker.getElement().removeAttribute('title');marker.bindTooltip(tip);marker.on('click',()=>{mapScope=new Set(unique.map(r=>r.key));selected=unique[0].key;update()});
  }
 }
 // Event units are never duplicated across locations in the event visualisations.
@@ -172,8 +171,7 @@ function eventGradient(e){const gs=e.groups;return gs.length<2?eventColour(e):`c
 function chooseEvent(r,e){
  selected=r.key;selectedEvent={r,e};tab='original';highlight=true;
  if(!filtered.some(x=>x.key===r.key)){mapScope=null;update()}
- const index=filtered.findIndex(x=>x.key===r.key);if(index>=0)page=Math.floor(index/8);
- renderResults();renderConfigurations();renderReader();showInspection('reader');if(mapReady)renderMap(applyFilters());renderActiveFilters();
+ renderConfigurations();renderReader();showInspection('reader');if(mapReady)renderMap(applyFilters());renderActiveFilters();
  const info=$('#reader .annotation');if(info)eventInfo(info,[e]);
  requestAnimationFrame(()=>{const passage=$('#reader mark.chosen');if(passage){passage.focus({preventScroll:true});passage.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'center'})}});
 }
@@ -198,14 +196,14 @@ function renderEventMap(records,background=false){
   });
   if(background)continue;
   const anchor=L.circleMarker([loc.lat,loc.lon],{radius:5,color:'#7ca99f',weight:1.5,fillColor:$('#map-palette').value==='dark'?'#0c1523':'#f7faf7',fillOpacity:1,dashArray:loc.precision==='source place'?null:'2 2'}).addTo(markers);
-  anchor.bindTooltip(el('span','',`${loc.label} · ${entries.length} events${loc.precision==='source place'?'':' · approximate / regional'}`));anchor.on('click',()=>{mapScope=new Set(entries.map(x=>x.r.key));page=0;update();showInspection('config')});
+  anchor.bindTooltip(el('span','',`${loc.label} · ${entries.length} events${loc.precision==='source place'?'':' · approximate / regional'}`));anchor.on('click',()=>{mapScope=new Set(entries.map(x=>x.r.key));update();showInspection('config')});
  }
 }
 function renderEventConcentration(records){
  const all=eventEntries(records),mapped=all.filter(x=>x.r.locations.length),sourceGroups=eventMapGroups(records);
  const cells=new Map(sourceGroups.map((group,i)=>[i,group]));
  const dark=$('#map-palette').value==='dark',radius=Number($('#heat-radius').value);
- const legend=$('#map-legend');legend.replaceChildren(el('strong','','Sensory layers'));for(const [g,name] of Object.entries(modeNames)){const item=button(name,()=>{configModes=new Set([g]);$('#config-match').value='any';page=0;update()});const swatch=el('b');swatch.style.background=sensoryColours[g];item.prepend(swatch);item.className='heat-category';item.setAttribute('aria-pressed',String(configModes.size===1&&configModes.has(g)));legend.append(item)}legend.append(button('All modes',()=>{resetSensorySelection();page=0;update()}));
+ const legend=$('#map-legend');legend.replaceChildren(el('strong','','Sensory layers'));for(const [g,name] of Object.entries(modeNames)){const item=button(name,()=>{configModes=new Set([g]);$('#config-match').value='any';update()});const swatch=el('b');swatch.style.background=sensoryColours[g];item.prepend(swatch);item.className='heat-category';item.setAttribute('aria-pressed',String(configModes.size===1&&configModes.has(g)));legend.append(item)}legend.append(button('All modes',()=>{resetSensorySelection();update()}));
  $('#map-count').textContent=`${mapped.length} mapped events · ${all.length-mapped.length} without coordinates`;
  $('#map-explanation').textContent=`Soft colour fields follow supplied source coordinates. Hue shows the strongest local sensory category; brightness shows coded event concentration. Nearby locations blend within a ${radius}-pixel smoothing radius. Radius adjusts visual blending, not geographic distance or coordinate accuracy. Select a category to inspect its layer. Approximate source places remain approximate.`;
  const dimensions=map.getSize(),heat=document.createElement('canvas');heat.width=dimensions.x;heat.height=dimensions.y;
@@ -223,7 +221,7 @@ function renderEventConcentration(records){
  // Each hit target stays on its actual supplied source coordinate.
  for(const cell of [...cells.values()].sort((a,b)=>b.entries.length-a.entries.length)){
   const n=cell.entries.length,places=[...new Map(cell.entries.map(x=>{const l=x.r.locations[0];return [l.lat+','+l.lon,l]})).values()],location=[places.reduce((sum,l)=>sum+l.lat,0)/places.length,places.reduce((sum,l)=>sum+l.lon,0)/places.length],diameter=20,hitSize=24;
-  const select=()=>{mapScope=new Set(cell.entries.map(x=>x.r.key));page=0;update();showInspection('config')};
+  const select=()=>{mapScope=new Set(cell.entries.map(x=>x.r.key));update();showInspection('config')};
   const count=L.marker(location,{icon:L.divIcon({className:'concentration-marker heat-hit',html:`<span class="heat-source-centre" data-count="${n}"></span>`,iconSize:[hitSize,hitSize],iconAnchor:[hitSize/2,hitSize/2]}),keyboard:true}).addTo(markers);
   const narrativeCount=new Set(cell.entries.map(x=>x.r.key)).size,placeNames=[...new Set(places.map(l=>l.label))];
   const label=`${n} sensory events · ${narrativeCount} narratives · ${placeNames.join(', ')}. Select to explore.`;
@@ -280,10 +278,10 @@ function renderConfigurations(){
  const detail=$('#config-event');detail.replaceChildren();if(selectedEvent){const {r,e}=selectedEvent;detail.append(el('p','eyebrow',`${collections[r.collection]} · ${e.id}`),el('p','',e.modalities.join(' + ')),el('blockquote','',e.span),el('p','hint',`Uncertainty: ${e.uncertainty} · ${e.kind}`),button('Read in narrative',()=>{selected=r.key;tab='original';renderReader();showInspection('reader');const info=$('#reader .annotation');if(info)eventInfo(info,[e])}));}else detail.append(el('p','hint','Choose an event on the map or in a constellation.'));
 }
 
-function clearAllFilters(){document.querySelectorAll('.filters input[type=checkbox]').forEach(x=>x.checked=false);$('#search').value='';$('#uncertainty').value='';resetSensorySelection();$('#config-group').value='modes';flowSelected=null;densitySelected=null;selectedEvent=null;mapScope=null;page=0;update()}
+function clearAllFilters(){document.querySelectorAll('.filters input[type=checkbox]').forEach(x=>x.checked=false);$('#search').value='';$('#uncertainty').value='';resetSensorySelection();$('#config-group').value='modes';flowSelected=null;densitySelected=null;selectedEvent=null;mapScope=null;update()}
 function renderActiveFilters(){
  const root=$('#active-filters');root.replaceChildren();let count=0;
- function add(label,remove){count++;const b=button(label+' ×',()=>{remove();page=0;update()});b.className='active-filter-chip';b.setAttribute('aria-label','Remove filter: '+label);root.append(b)}
+ function add(label,remove){count++;const b=button(label+' ×',()=>{remove();update()});b.className='active-filter-chip';b.setAttribute('aria-label','Remove filter: '+label);root.append(b)}
  document.querySelectorAll('[name=collection]:checked').forEach(i=>add('Collection: '+collections[i.value],()=>{i.checked=false;mapScope=null}));
  document.querySelectorAll('[name=mode]:checked').forEach(i=>add('Mode: '+modeNames[i.value],()=>{i.checked=false;mapScope=null}));
  if($('#search').value.trim())add('Search: '+$('#search').value.trim(),()=>{$('#search').value='';mapScope=null});
@@ -309,7 +307,7 @@ function renderSensoryComparison(root,entries){
  const table=el('table','count-table'),thead=el('thead'),hr=el('tr');['Collection','Events',...Object.values(modeNames)].forEach(t=>hr.append(el('th','',t)));thead.append(hr);table.append(thead);const tbody=el('tbody');
  for(const [code,name] of Object.entries(collections)){const es=entries.filter(x=>x.r.collection===code),counts=Object.keys(modeNames).map(g=>[g,es.filter(x=>x.e.groups.includes(g)).length]),total=counts.reduce((n,x)=>n+x[1],0),row=el('div','composition-row'),header=el('div','composition-label');header.append(el('strong','',name),el('span','',`${es.length} events · ${total} sensory-category links`));row.append(header);const bar=el('div','composition-bar');bar.setAttribute('aria-label',name+' sensory composition');
   if(!total)bar.append(el('span','no-data','No matching events'));
-  for(const [g,n] of counts){if(!n)continue;const percent=100*n/total,b=button('',()=>{document.querySelectorAll('[name=collection]').forEach(i=>i.checked=i.value===code);configModes=new Set([g]);$('#config-match').value='contains';mapScope=null;page=0;researchView='clusters';update()});b.style.width=percent+'%';b.style.backgroundColor=sensoryColours[g];b.style.color=$('#map-palette').value==='dark'?'#102233':'#ffffff';b.title=`${name} · ${modeNames[g]}: ${n} sensory-category links (${percent.toFixed(1)}%)`;b.setAttribute('aria-label',b.title+'. Explore these events');if(percent>=12)b.textContent=Math.round(percent)+'%';bar.append(b)}
+  for(const [g,n] of counts){if(!n)continue;const percent=100*n/total,b=button('',()=>{document.querySelectorAll('[name=collection]').forEach(i=>i.checked=i.value===code);configModes=new Set([g]);$('#config-match').value='contains';mapScope=null;researchView='clusters';update()});b.style.width=percent+'%';b.style.backgroundColor=sensoryColours[g];b.style.color=$('#map-palette').value==='dark'?'#102233':'#ffffff';b.title=`${name} · ${modeNames[g]}: ${n} sensory-category links (${percent.toFixed(1)}%)`;b.setAttribute('aria-label',b.title+'. Explore these events');if(percent>=12)b.textContent=Math.round(percent)+'%';bar.append(b)}
   row.append(bar);root.append(row);const tr=el('tr');tr.append(el('th','',name),el('td','',es.length));counts.forEach(([,n])=>tr.append(el('td','',n)));tbody.append(tr);
  }
  table.append(tbody);const axis=el('div','composition-axis');['0%','25%','50%','75%','100%'].forEach(t=>axis.append(el('span','',t)));root.append(axis,el('p','research-note','Only sensory events are counted; unresolved candidates and responses are excluded. Counts describe this pilot selection, not prevalence in a country. Select a segment to inspect its events.'));
