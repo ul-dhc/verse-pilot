@@ -1,5 +1,6 @@
 'use strict';
 const DATA=window.VERSE_DATA.records, $=s=>document.querySelector(s);
+const evidenceById=new Map((window.VERSE_DATA.evidence||[]).map(e=>[e.evidence_id,e]));
 const collections={LV:'Latvian',NO:'Norwegian',FI:'Finnish',SE:'Swedish'};
 const modeNames={vision:'Vision',hearing:'Hearing',body:'Bodily experience',smell:'Smell',taste:'Taste',orientation:'Orientation / space',other:'Other perception'};
 const langs={LV:'lv',NO:'no',FI:'fi',SE:'sv'};
@@ -12,6 +13,7 @@ let densitySort='density',densityShowAll=true,densitySelected=null;
 document.addEventListener('click',ev=>{if(densitySelected&&!ev.target.closest('.density-list')){densitySelected=null;document.querySelector('.density-list')?.classList.remove('has-selection');document.querySelectorAll('.density-row.is-selected').forEach(row=>{row.classList.remove('is-selected');row.setAttribute('aria-pressed','false')});const caption=document.querySelector('.density-caption');if(caption){caption.querySelector('strong').textContent='Explore the weave';caption.querySelector('span').textContent='Hover or focus a strand to inspect a narrative · click to read'}}},true);
 let configModes=new Set(Object.keys(modeNames)),eventMarks='events',researchView='comparison',flowSelected=null;
 let selected='LV:130801007',page=0,tab='original',highlight=true,filtered=DATA;
+let showResponses=false,showCandidates=false;
 function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
 function tone(node,g){node.style.setProperty('--tone',`var(--${g})`);return node}
 function chip(text,g){return tone(el('span','chip',text),g||'other')}
@@ -25,18 +27,74 @@ function resetSensorySelection(){configModes=new Set(Object.keys(modeNames));$('
 function applyFilters(ignoreCollection=false){const cs=[...document.querySelectorAll('[name=collection]:checked')].map(x=>x.value),ms=[...document.querySelectorAll('[name=mode]:checked')].map(x=>x.value),q=$('#search').value.toLocaleLowerCase().trim(),u=$('#uncertainty').value;return DATA.filter(r=>(ignoreCollection||!cs.length||cs.includes(r.collection))&&(!ms.length||r.groups.some(g=>ms.includes(g)))&&(!$('#translated').checked||r.translation)&&(!q||`${r.id} ${r.title} ${r.text} ${r.translation}`.toLocaleLowerCase().includes(q))&&(!u||(u==='none'?!r.events.some(e=>['yes','unclear'].includes(e.uncertainty)):r.events.some(e=>e.uncertainty===u)))&&(defaultSensorySelection()||matchingEvents(r).length>0))}
 function update(){const candidates=applyFilters();filtered=mapScope==='unmapped'?candidates.filter(r=>!r.locations.length):mapScope instanceof Set?candidates.filter(r=>mapScope.has(r.key)):candidates;$('#result-count').textContent=filtered.length;$('#result-detail').textContent=`${filtered.filter(r=>r.translation).length} with English translation`;if(!filtered.some(r=>r.key===selected))selected=filtered[0]?.key;renderResults();renderReader();if(mapReady)renderMap(candidates);renderConfigurations();renderActiveFilters()}
 function renderResults(){const list=$('#results-list');list.replaceChildren();const pages=Math.max(1,Math.ceil(filtered.length/8));page=Math.min(page,pages-1);for(const r of filtered.slice(page*8,page*8+8)){const b=button('',()=>{selected=r.key;renderResults();renderReader();showInspection('reader');if(mapReady)renderMap(applyFilters());if(innerWidth<851)$('#reader').scrollIntoView({behavior:'smooth',block:'start'})});b.className='result'+(selected===r.key?' selected':'');b.setAttribute('aria-current',selected===r.key?'true':'false');const m=el('div','meta',`${collections[r.collection].toUpperCase()} · ${r.id}`);if(r.translation)m.append(el('span','translated-badge','EN'));b.append(m,el('strong','',r.title));const modes=el('div','modes-line');r.groups.forEach(g=>modes.append(tone(el('span','dot'),g)));modes.append(document.createTextNode(r.groups.map(g=>modeNames[g]).join(' · ')||'No included sensory events'));b.append(modes);list.append(b)}if(!filtered.length)list.append(el('p','empty','No narratives match these filters. Try Reset or a different search.'));$('#page-label').textContent=`${page+1} / ${pages}`;$('#prev-page').disabled=page===0;$('#next-page').disabled=page>=pages-1}
-function eventInfo(parent,events){parent.replaceChildren();parent.hidden=false;for(const e of events){const item=el('div');item.append(el('p','eyebrow',e.id),el('blockquote','',e.span));const chips=el('div','chips');e.modalities.forEach(m=>chips.append(chip(m,e.groups[0])));item.append(chips);item.append(el('p','',`Uncertainty: ${e.uncertainty==='no'?'not explicitly coded':e.uncertainty}${e.uncertaintyType?' · '+e.uncertaintyType:''}`));if(e.evidence){const evidence=typeof e.evidence==='string'?e.evidence:e.evidence.map(x=>x.span||x.exact_span||x.evidence||'').filter(Boolean).join(' · ');if(evidence)item.append(el('p','',`Uncertainty evidence: ${evidence}`))}if(e.gloss)item.append(el('p','',e.gloss));item.append(el('p','',`Evidence: ${e.kind}${e.polarity?' · '+e.polarity:''}`));if(e.note)item.append(el('p','',e.note));parent.append(item)}}
-function original(r,parent,isTranslation=false){const text=el('div','narrative');text.lang=isTranslation?'en':langs[r.collection];const content=isTranslation?r.translation:r.text,eventList=isTranslation?(r.translationEvents||[]):r.events;const info=el('div','annotation');info.hidden=true;const points=Array.from(content);const boundaries=[...new Set([0,points.length,...eventList.flatMap(e=>[e.start,e.end])])].sort((a,b)=>a-b);for(let i=0;i<boundaries.length-1;i++){const a=boundaries[i],b=boundaries[i+1],segment=points.slice(a,b).join(''),events=eventList.filter(e=>e.start<=a&&e.end>=b);if(!events.length||!highlight){text.append(document.createTextNode(segment));continue}const modes=[...new Set(events.flatMap(e=>e.groups))],mark=tone(el('mark',modes.length>1?'multi':'',segment),modes[0]);if(selectedEvent?.r.key===r.key&&events.some(e=>e.id===selectedEvent.e.id))mark.classList.add('chosen');if(modes[1])mark.style.setProperty('--tone2',`var(--${modes[1]})`);mark.dataset.record=r.key;mark.dataset.eventIds=events.map(e=>e.id).join(' ');mark.tabIndex=0;mark.setAttribute('role','button');mark.setAttribute('aria-label',`${modes.map(g=>modeNames[g]).join(', ')}: ${segment}. Inspect annotation`);function select(){const ids=events.map(e=>e.id);selectedEvent={r,e:r.events.find(e=>e.id===ids[0])};document.querySelectorAll('mark[data-event-ids]').forEach(m=>{if(m.dataset.record===r.key)m.classList.toggle('chosen',m.dataset.eventIds.split(' ').some(id=>ids.includes(id)))});eventInfo(info,events);info.scrollIntoView({behavior:'smooth',block:'nearest'})}mark.onclick=select;mark.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select()}};text.append(mark)}parent.append(text,info)}
+function annotationSpans(e){return e.spans||[{start:e.start,end:e.end,span:e.span}]}
+function eventInfo(parent,events){
+ parent.replaceChildren();parent.hidden=false;
+ for(const e of events){
+  const item=el('div'),response=e.type==='response',candidate=e.type==='candidate';
+  item.append(el('p','eyebrow',`${response?'Response':candidate?'Unresolved candidate':'Sensory event'} · ${e.id}`));
+  if(response)item.append(el('strong','',e.label));
+  for(const s of annotationSpans(e))item.append(el('blockquote','',s.span));
+  if(response){
+   item.append(el('p','',`Roles: ${e.roles.join(', ')}`),el('p','',e.event_ids.length?`Event link: ${e.link_status} · ${e.event_ids.join(', ')}`:'Unassigned response candidate · no confirmed sensory-event link'),el('p','',e.explanation));
+   if(e.notes)item.append(el('p','',e.notes));
+  }else{
+   const chips=el('div','chips');e.modalities.forEach(m=>chips.append(chip(m,e.groups[0])));item.append(chips);
+   item.append(el('p','',`Perceptual status: ${e.polarity}`),el('p','',`Narrated uncertainty: ${e.uncertainty==='no'?'not stated':e.uncertaintyType}`));
+   if(candidate)item.append(el('p','hint','Excluded from map points, graphs and sensory-event counts.'));
+   if(e.evidence)item.append(el('p','',`Uncertainty evidence: ${e.evidence}`));
+   if(e.note)item.append(el('p','',e.note));
+   if(Object.keys(e.context||{}).length){const dl=el('dl');for(const [k,v] of Object.entries(e.context))dl.append(el('dt','',k.replaceAll('_',' ')),el('dd','',v));item.append(dl)}
+  }
+  if(e.gloss)item.append(el('p','hint',`Working gloss: ${e.gloss}`));
+  const ids=e.evidenceIds||[...(e.evidence_ids||[]),...(e.link_evidence_ids||[])],proofs=ids.map(id=>evidenceById.get(id)).filter(Boolean);
+  if(proofs.length){const d=el('details');d.append(el('summary','', 'Supporting evidence'));for(const proof of proofs)d.append(el('p','hint',`${proof.field.replaceAll('_',' ')} · ${proof.start_codepoint}–${proof.end_codepoint_exclusive}`),el('blockquote','',proof.quote));item.append(d)}
+  parent.append(item);
+ }
+}
+function annotationLayers(r,parent){
+ const nr=(r.responses||[]).length,nc=(r.candidates||[]).length;if(!nr&&!nc)return;
+ const d=el('details','annotation-layers');d.open=showResponses||showCandidates;
+ d.append(el('summary','',`Additional annotations · ${nr} responses · ${nc} candidates`),el('p','hint','Optional original-text layers, excluded from sensory-event counts. Dashed passages are unresolved candidates; underlined passages are responses. Response links may be supported, ambiguous or unassigned.'));
+ for(const [id,label,count,checked,set] of [['show-responses','Show response passages',nr,showResponses,v=>showResponses=v],['show-candidates','Show candidate passages',nc,showCandidates,v=>showCandidates=v]]){
+  const l=el('label','check'),input=el('input');input.type='checkbox';input.id=id;input.checked=checked;input.disabled=!count;input.onchange=()=>{set(input.checked);renderReader()};l.append(input,document.createTextNode(`${label} (${count})`));d.append(l);
+ }parent.append(d);
+}
+function original(r,parent,isTranslation=false){
+ const text=el('div','narrative');text.lang=isTranslation?'en':langs[r.collection];
+ const content=isTranslation?r.translation:r.text,eventList=isTranslation?(r.translationEvents||[]):[...r.events,...(showCandidates?r.candidates||[]:[]),...(showResponses?r.responses||[]:[])];
+ const info=el('div','annotation');info.hidden=true;const points=Array.from(content);
+ const ranges=eventList.flatMap(e=>annotationSpans(e).map(s=>({...s,event:e})));
+ const boundaries=[...new Set([0,points.length,...ranges.flatMap(s=>[s.start,s.end])])].sort((a,b)=>a-b);
+ for(let i=0;i<boundaries.length-1;i++){
+  const a=boundaries[i],b=boundaries[i+1],segment=points.slice(a,b).join('');
+  const events=[...new Map(ranges.filter(s=>s.start<=a&&s.end>=b).map(s=>[s.event.id,s.event])).values()];
+  if(!events.length||!highlight){text.append(document.createTextNode(segment));continue}
+  const sensory=events.filter(e=>e.type==='conservative'),modes=[...new Set(sensory.flatMap(e=>e.groups))],mark=el('mark',modes.length>1?'multi':'',segment);
+  if(modes.length){tone(mark,modes[0]);if(modes[1])mark.style.setProperty('--tone2',`var(--${modes[1]})`)}else mark.classList.add('auxiliary-mark');
+  if(events.some(e=>e.type==='candidate'))mark.classList.add('candidate-mark');
+  if(events.some(e=>e.type==='response'))mark.classList.add('response-mark');
+  if(selectedEvent?.r.key===r.key&&events.some(e=>e.id===selectedEvent.e.id))mark.classList.add('chosen');
+  mark.dataset.record=r.key;mark.dataset.eventIds=events.map(e=>e.id).join(' ');mark.tabIndex=0;mark.setAttribute('role','button');
+  const labels=[...modes.map(g=>modeNames[g]),...(events.some(e=>e.type==='response')?['Response']:[]),...(events.some(e=>e.type==='candidate')?['Candidate']:[])];
+  mark.setAttribute('aria-label',`${labels.join(', ')}: ${segment}. Inspect annotation`);
+  function select(){
+   const ids=events.map(e=>e.id),main=r.events.find(e=>ids.includes(e.id));selectedEvent=main?{r,e:main}:null;
+   document.querySelectorAll('mark[data-event-ids]').forEach(m=>{if(m.dataset.record===r.key)m.classList.toggle('chosen',m.dataset.eventIds.split(' ').some(id=>ids.includes(id)))});
+   eventInfo(info,events.map(e=>isTranslation?r.events.find(source=>source.id===e.id):e));info.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }mark.onclick=select;mark.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select()}};text.append(mark);
+ }parent.append(text,info);
+}
 function translation(r,parent){
  if(!r.translation)return;
- const section=el('section','translation-block');section.setAttribute('aria-label','English translation');section.append(el('h3','language-heading','English translation'),el('p','hint translation-status','Working translation · Not reviewed by a human. Highlights correspond to the original sensory annotations.'));
+ const section=el('section','translation-block');section.setAttribute('aria-label','English translation');section.append(el('h3','language-heading','English translation'),el('p','hint translation-status',`Working translation · Not reviewed by a human. ${r.translationEvents?.length?'Highlights retain existing alignments only where the original evidence span and sensory modes are unchanged. Other revised passages are not aligned.':'Revised sensory annotations are not yet aligned to this translation.'}`));
  original(r,section,true);
  if(r.translationNotes.length){const d=el('details');d.append(el('summary','', 'Translator notes'));r.translationNotes.forEach(n=>d.append(el('p','',n)));section.append(d)}parent.append(section);
 }
 
-function contexts(r,parent){const section=el('div','context');section.append(el('h3','', 'Narrative context'));const dl=el('dl');for(const [k,label] of [['place','Place'],['time','Time'],['movement','Movement']]){dl.append(el('dt','',label),el('dd','',r.context[k]||'Not coded'))}section.append(dl,el('p','hint','Selected narrative contexts; not uniformly linked to individual events.'));parent.append(section)}
+function contexts(r,parent){const section=el('div','context');section.append(el('h3','', 'Narrative context'));const dl=el('dl');for(const [k,label] of [['place','Place'],['time','Time'],['movement','Movement']]){dl.append(el('dt','',label),el('dd','',r.context[k]||'Not coded'))}section.append(dl,el('p','hint','Contexts recorded for conservative sensory events. Event details show their supporting evidence.'));parent.append(section)}
 function source(r,parent){parent.append(el('h3','', 'Source reference'),el('p','',r.source||'No source reference supplied for this record.'),el('p','',`Record: ${r.id} · ${collections[r.collection]}`),el('p','',`Source category: ${r.category||'Not supplied'}`));for(const loc of r.locations||[])parent.append(el('p','',`Map: ${loc.label} · ${loc.precision}. ${loc.provenance}`));if(r.place)parent.append(el('p','',`Collection place: ${r.place}`));if(r.annotationNote)parent.append(el('p','',`Annotation note: ${r.annotationNote}`));parent.append(el('p','hint','Source categories and collection places are metadata, not inferred narrative identities or event locations.'))}
-function renderReader(){renderMetadata();const parent=$('#reader');parent.replaceChildren();const r=DATA.find(x=>x.key===selected);if(!r){parent.append(el('p','empty','Select different filters to browse the collection.'));return}const top=el('div','reader-top');top.append(el('p','eyebrow',`${collections[r.collection].toUpperCase()} COLLECTION · ${r.id}`));parent.append(top,el('h1','',r.title),el('div','reader-meta',`${r.events.length} sensory events · ${r.translation?'English translation available':'Original language'}`));const chips=el('div','chips');r.groups.forEach(g=>chips.append(chip(modeNames[g],g)));parent.append(chips);const tabs=el('div','tabs');for(const [id,label] of [['original','Text'],['source','Source information']]){const b=button(label,()=>{tab=id;renderReader()});b.className=tab===id?'active':'';b.setAttribute('aria-pressed',String(tab===id));tabs.append(b)}parent.append(tabs);if(tab==='original'){const row=el('div','toggle-row');row.append(el('span','hint','Select a highlighted passage to inspect its annotation.'));const label=el('label'),input=el('input');input.type='checkbox';input.checked=highlight;input.onchange=()=>{highlight=input.checked;renderReader()};label.append(input,document.createTextNode('Highlight'));row.append(label);parent.append(row);legend(parent);parent.append(el('h3','language-heading','Original'));original(r,parent);translation(r,parent);contexts(r,parent)}else if(tab==='english')translation(r,parent);else source(r,parent)}
+function renderReader(){renderMetadata();const parent=$('#reader');parent.replaceChildren();const r=DATA.find(x=>x.key===selected);if(!r){parent.append(el('p','empty','Select different filters to browse the collection.'));return}const top=el('div','reader-top');top.append(el('p','eyebrow',`${collections[r.collection].toUpperCase()} COLLECTION · ${r.id}`));parent.append(top,el('h1','',r.title),el('div','reader-meta',`${r.events.length} conservative sensory events · ${r.translation?'English translation available':'Original language'}`));const chips=el('div','chips');r.groups.forEach(g=>chips.append(chip(modeNames[g],g)));parent.append(chips);const tabs=el('div','tabs');for(const [id,label] of [['original','Text'],['source','Source information']]){const b=button(label,()=>{tab=id;renderReader()});b.className=tab===id?'active':'';b.setAttribute('aria-pressed',String(tab===id));tabs.append(b)}parent.append(tabs);if(tab==='original'){const row=el('div','toggle-row');row.append(el('span','hint','Select a highlighted passage to inspect its annotation.'));const label=el('label'),input=el('input');input.type='checkbox';input.checked=highlight;input.onchange=()=>{highlight=input.checked;renderReader()};label.append(input,document.createTextNode('Highlight'));row.append(label);parent.append(row);annotationLayers(r,parent);legend(parent);parent.append(el('h3','language-heading','Original'));original(r,parent);translation(r,parent);contexts(r,parent)}else if(tab==='english')translation(r,parent);else source(r,parent)}
 $('#search').oninput=()=>{page=0;mapScope=null;update()};$('#uncertainty').onchange=$('#translated').onchange=()=>{page=0;mapScope=null;update()};$('#reset').onclick=clearAllFilters;$('#prev-page').onclick=()=>{page--;renderResults()};$('#next-page').onclick=()=>{page++;renderResults()};$('#browse').onclick=()=>{$('#corpus-map').scrollIntoView({behavior:'smooth',block:'center'});if(mapReady)map.invalidateSize()};$('#about').onclick=()=>$('#about-dialog').showModal();$('#close-about').onclick=()=>$('#about-dialog').close();initConfigurations();initMap();update();
 
 $("#corpus-summary").textContent = `${DATA.length} narratives · ${new Set(DATA.map(r=>r.collection)).size} collections · ${DATA.filter(r=>r.translation).length} English translations`;
@@ -243,7 +301,7 @@ function renderSensoryComparison(root,entries){
   for(const [g,n] of counts){if(!n)continue;const percent=100*n/total,b=button('',()=>{document.querySelectorAll('[name=collection]').forEach(i=>i.checked=i.value===code);configModes=new Set([g]);$('#config-match').value='contains';mapScope=null;page=0;researchView='clusters';update()});b.style.width=percent+'%';b.style.backgroundColor=sensoryColours[g];b.style.color=$('#map-palette').value==='dark'?'#102233':'#ffffff';b.title=`${name} · ${modeNames[g]}: ${n} sensory-category links (${percent.toFixed(1)}%)`;b.setAttribute('aria-label',b.title+'. Explore these events');if(percent>=12)b.textContent=Math.round(percent)+'%';bar.append(b)}
   row.append(bar);root.append(row);const tr=el('tr');tr.append(el('th','',name),el('td','',es.length));counts.forEach(([,n])=>tr.append(el('td','',n)));tbody.append(tr);
  }
- table.append(tbody);const axis=el('div','composition-axis');['0%','25%','50%','75%','100%'].forEach(t=>axis.append(el('span','',t)));root.append(axis,el('p','research-note','Counts reflect the current filters and coding scheme, not the prevalence of experiences in a country. Select a segment to inspect its events.'));
+ table.append(tbody);const axis=el('div','composition-axis');['0%','25%','50%','75%','100%'].forEach(t=>axis.append(el('span','',t)));root.append(axis,el('p','research-note','Only conservative sensory events are counted; unresolved candidates and responses are excluded. Counts describe this pilot selection, not prevalence in a country. Select a segment to inspect its events.'));
  const details=el('details','chart-data');details.append(el('summary','', 'View exact counts'));const wrap=el('div','table-scroll');wrap.append(table);details.append(wrap);root.append(details);
 }
 function renderEventFlow(root,entries){
@@ -289,7 +347,7 @@ function renderEventFlow(root,entries){
   const hit=hitAt(ev);
   if(hit){ev.preventDefault();ev.stopImmediatePropagation();hit.select()}
  },true);
- root.append(svg,el('p','research-note',`${filtered.length-records.length} narratives in the current selection have no matching sensory events. Single-event narratives appear as dots. Position follows source-text offsets, not elapsed time or causation; small vertical offsets separate overlapping strands.`),detail);
+ root.append(svg,el('p','research-note',`${filtered.length-records.length} narratives in the current selection have no matching sensory events. Single-event narratives appear as dots. Each event is positioned at the start of its first evidence passage, even when it has several passages. Position is not elapsed time or causation; small vertical offsets separate overlapping strands.`),detail);
  if(flowSelected){const list=byRecord.get(flowSelected);showDetail(list[0].r,list.find(x=>x.e.id===selectedEvent?.e.id)?.e||list[0].e)}else detail.append(el('p','research-note','Select a point on any sensory axis to highlight its strand and read the passage.'));focus(flowSelected);
 }
 

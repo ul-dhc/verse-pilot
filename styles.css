@@ -179,3 +179,12 @@ a.brand{color:inherit;text-decoration:none;cursor:pointer}a.brand:hover{color:#4
 
 /* Keep location targets accessible without drawing point symbols over the heat. */
 .heat-source-centre,.heat-hit:hover .heat-source-centre,.heat-hit:focus-visible .heat-source-centre{visibility:hidden}
+
+/* Optional annotation layers remain distinct from counted sensory modes. */
+.annotation-layers{margin:1rem 0;padding:.8rem 1rem;border:1px solid var(--line,#ced8da);border-radius:14px;background:rgba(139,155,173,.06)}
+.annotation-layers summary{cursor:pointer;font-weight:600}.annotation-layers .check{margin:.65rem 0}.annotation-layers .hint{margin:.7rem 0}
+.narrative mark.auxiliary-mark{background:rgba(155,134,188,.13);color:inherit}
+.narrative mark.response-mark{text-decoration:underline;text-decoration-color:#977bad;text-decoration-thickness:2px;text-underline-offset:4px}
+.narrative mark.candidate-mark{border-bottom:2px dashed #8a7b54}
+.annotation>div+div{margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--line,#ced8da)}
+.annotation dl{display:grid;grid-template-columns:minmax(100px,1fr) 2fr;gap:.5rem 1rem;font-size:.9rem}.annotation dd{margin:0}.annotation dt{text-transform:capitalize}
