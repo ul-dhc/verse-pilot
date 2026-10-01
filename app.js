@@ -6,8 +6,8 @@ const modeNames={vision:'Vision',hearing:'Hearing',body:'Bodily experience',smel
 const langs={LV:'lv',NO:'no',FI:'fi',SE:'sv'};
 let map,mapReady=false,mapScope=null,markers,baseTiles;
 const collectionColours={LV:'#b6a3cc',NO:'#97bcae',FI:'#d6b796',SE:'#9ebacf'};
-const sensoryColours={vision:'#d9ba48',hearing:'#4b9fff',body:'#dc94b2',smell:'#d9a877',taste:'#4fd1bd',orientation:'#b19add',other:'#25bfd3'};
-const sensoryPalettes={dark:{...sensoryColours},light:{vision:'#887018',hearing:'#2169bf',body:'#ae648a',smell:'#956e37',taste:'#087d70',orientation:'#7955aa',other:'#087c90'}};
+const sensoryColours={vision:'#f3c95c',hearing:'#9b78ff',body:'#dc94b2',smell:'#d9a877',taste:'#4fd1bd',orientation:'#4b9fff',other:'#25bfd3'};
+const sensoryPalettes={dark:{...sensoryColours},light:{vision:'#887018',hearing:'#7550ba',body:'#ae648a',smell:'#956e37',taste:'#087d70',orientation:'#2169bf',other:'#087c90'}};
 let mapView='senses',countryLayer,selectedEvent=null;
 let densitySort='density',densityShowAll=true,densitySelected=null;
 document.addEventListener('click',ev=>{if(densitySelected&&!ev.target.closest('.density-list')){densitySelected=null;document.querySelector('.density-list')?.classList.remove('has-selection');document.querySelectorAll('.density-row.is-selected').forEach(row=>{row.classList.remove('is-selected');row.setAttribute('aria-pressed','false')});const caption=document.querySelector('.density-caption');if(caption){caption.querySelector('strong').textContent='Explore the weave';caption.querySelector('span').textContent='Hover or focus a strand to inspect a narrative · click to read'}}},true);
@@ -110,6 +110,7 @@ function initMap(){
  $('#event-marks').onchange=()=>{eventMarks=$('#event-marks').value;renderMap(applyFilters())};
  $('#heat-intensity').oninput=()=>{$('#heat-intensity-value').textContent=$('#heat-intensity').value+'%';renderMap(applyFilters())};
  $('#heat-radius').oninput=()=>{const value=$('#heat-radius').value;$('#heat-radius-value').textContent=value+' px';$('#heat-radius').setAttribute('aria-valuetext',value+' pixels');renderMap(applyFilters())};
+ $('#heat-contours').onchange=()=>renderMap(applyFilters());
  $('#event-spread').oninput=()=>renderMap(applyFilters());
  map.on('zoomend moveend',()=>renderMap(applyFilters()));
  map.on('click',ev=>{
@@ -213,10 +214,10 @@ function renderEventMap(records,background=false){
 function renderEventConcentration(records){
  const all=eventEntries(records),mapped=all.filter(x=>x.r.locations.length),sourceGroups=eventMapGroups(records);
  const cells=new Map(sourceGroups.map((group,i)=>[i,group]));
- const dark=$('#map-palette').value==='dark',radius=Number($('#heat-radius').value);
+ const dark=$('#map-palette').value==='dark',radius=Number($('#heat-radius').value),contours=$('#heat-contours').checked;
  const legend=$('#map-legend');legend.replaceChildren(el('strong','','Sensory layers'));for(const [g,name] of Object.entries(modeNames)){const item=button(name,()=>{configModes=new Set([g]);$('#config-match').value='any';update()});const swatch=el('b');swatch.style.background=sensoryColours[g];item.prepend(swatch);item.className='heat-category';item.setAttribute('aria-pressed',String(configModes.size===1&&configModes.has(g)));legend.append(item)}legend.append(button('All modes',()=>{resetSensorySelection();update()}));
  $('#map-count').textContent=`${mapped.length} mapped events · ${all.length-mapped.length} without coordinates`;
- $('#map-explanation').textContent=`Soft colour fields follow supplied source coordinates. Hue shows the strongest local sensory category; brightness shows coded event concentration. Nearby locations blend within a ${radius}-pixel smoothing radius. Radius adjusts visual blending, not geographic distance or coordinate accuracy. Select a category to inspect its layer. Approximate source places remain approximate.`;
+ $('#map-explanation').textContent=`Colour fields follow supplied source coordinates. Hue shows the strongest local sensory category; brightness shows coded event concentration. Nearby locations blend within a ${radius}-pixel smoothing radius. ${contours?'Contour lines show smoothed concentration levels, not distance rings. ':''}Radius adjusts visual blending, not geographic distance or coordinate accuracy. Select a category to inspect its layer. Approximate source places remain approximate.`;
  const dimensions=map.getSize(),heat=document.createElement('canvas');heat.width=dimensions.x;heat.height=dimensions.y;
  const ctx=heat.getContext('2d'),modes=Object.keys(modeNames),fields=modes.map(()=>new Float32Array(heat.width*heat.height)),intensity=Number($('#heat-intensity').value)/100;
  for(const {loc,entries} of sourceGroups){
@@ -226,9 +227,20 @@ function renderEventConcentration(records){
    weights.forEach((weight,g)=>{if(weight)fields[g][index]+=weight*kernel});
   }
  }
- const pixels=ctx.createImageData(heat.width,heat.height),colours=modes.map(g=>sensoryColours[g].slice(1).match(/../g).map(x=>Math.round(parseInt(x,16)*.65+255*.35)));
- for(let i=0;i<heat.width*heat.height;i++){let strongest=0,value=0;for(let g=0;g<modes.length;g++)if(fields[g][i]>value){strongest=g;value=fields[g][i]}if(value<.02)continue;const alpha=Math.min(dark?.85:.72,Math.log1p(value)/5*intensity);for(let c=0;c<3;c++)pixels.data[i*4+c]=colours[strongest][c];pixels.data[i*4+3]=Math.round(alpha*255)}
- ctx.putImageData(pixels,0,0);if(!map.getPane('heatPane')){const pane=map.createPane('heatPane');pane.style.zIndex='450';pane.style.pointerEvents='none'}L.imageOverlay(heat.toDataURL(),map.getBounds(),{interactive:false,pane:'heatPane',className:'concentration-heat'}).addTo(markers);
+ const pixels=ctx.createImageData(heat.width,heat.height),strength=contours?new Float32Array(heat.width*heat.height):null,colours=modes.map(g=>sensoryColours[g].slice(1).match(/../g).map(x=>parseInt(x,16)));
+ // Keep category colours vivid. Fade only the low-density fringe instead of
+ // turning the entire field into a pale haze. The scale stays fixed across filters.
+ const gain=Math.sqrt(Math.max(0,Math.min(1,(intensity-.4)/1.4))),opacity=dark?.35+.63*gain:.3+.6*gain;
+ for(let i=0;i<heat.width*heat.height;i++){
+  let strongest=0,value=0;for(let g=0;g<modes.length;g++)if(fields[g][i]>value){strongest=g;value=fields[g][i]}
+  if(strength)strength[i]=value;
+  if(value<=.1)continue;
+  const density=Math.min(1,Math.log1p(value)/Math.log(17)),edge=Math.min(1,(value-.1)/.22),fade=edge*edge*(3-2*edge);
+  const alpha=opacity*fade*(.58+.42*density),lighten=dark?.03+.1*density:.03*density;
+  for(let c=0;c<3;c++)pixels.data[i*4+c]=Math.round(colours[strongest][c]*(1-lighten)+255*lighten);
+  pixels.data[i*4+3]=Math.round(alpha*255);
+ }
+ ctx.putImageData(pixels,0,0);if(contours)drawHeatContours(ctx,strength,heat.width,heat.height,dark,intensity);if(!map.getPane('heatPane')){const pane=map.createPane('heatPane');pane.style.zIndex='450';pane.style.pointerEvents='none'}L.imageOverlay(heat.toDataURL(),map.getBounds(),{interactive:false,pane:'heatPane',className:'concentration-heat'}).addTo(markers);
  // Each hit target stays on its actual supplied source coordinate.
  for(const cell of [...cells.values()].sort((a,b)=>b.entries.length-a.entries.length)){
   const n=cell.entries.length,places=[...new Map(cell.entries.map(x=>{const l=x.r.locations[0];return [l.lat+','+l.lon,l]})).values()],location=[places.reduce((sum,l)=>sum+l.lat,0)/places.length,places.reduce((sum,l)=>sum+l.lon,0)/places.length],diameter=20,hitSize=24;
@@ -241,6 +253,29 @@ function renderEventConcentration(records){
   const tip=el('div','concentration-tip');tip.append(el('strong','',`${n} sensory events`),el('div','',`${narrativeCount} narratives · ${placeNames.length} source places`),el('div','',placeNames.slice(0,3).join(' · ')+(placeNames.length>3?' …':'')),el('div','',places.some(l=>l.precision!=='source place')?'Approximate / regional source coordinate':'Supplied source-place coordinate'));for(const g of Object.keys(modeNames)){const n=cell.entries.filter(x=>x.e.groups.includes(g)).length;if(n)tip.append(el('div','',`${modeNames[g]}: ${n}`))}count.bindTooltip(tip,{direction:'top',className:'concentration-tooltip',offset:[0,-diameter/2]});count.on('click',select);
  }
 
+}
+
+// Marching squares on the same concentration field: nearby peaks form shared
+// contours. Fixed levels keep the overlay comparable when filters change.
+function drawHeatContours(ctx,field,width,height,dark,intensity){
+ const step=2,levels=[.25,.5,1,2,4,8,16,32,64];
+ ctx.strokeStyle=dark?`rgba(244,235,255,${.18+.24*intensity/1.8})`:'rgba(49,46,73,.35)';ctx.lineWidth=.7;ctx.lineCap='round';ctx.lineJoin='round';
+ for(const level of levels){
+  ctx.beginPath();
+  for(let y=0;y<height-step;y+=step)for(let x=0;x<width-step;x+=step){
+   const a=field[y*width+x],b=field[y*width+x+step],c=field[(y+step)*width+x+step],d=field[(y+step)*width+x];
+   if(Math.max(a,b,c,d)<level||Math.min(a,b,c,d)>=level)continue;
+   const crosses=[];
+   if((a>=level)!==(b>=level))crosses.push([x+step*(level-a)/(b-a),y]);
+   if((b>=level)!==(c>=level))crosses.push([x+step,y+step*(level-b)/(c-b)]);
+   if((c>=level)!==(d>=level))crosses.push([x+step-step*(level-c)/(d-c),y+step]);
+   if((d>=level)!==(a>=level))crosses.push([x,y+step-step*(level-d)/(a-d)]);
+   const connect=(i,j)=>{ctx.moveTo(...crosses[i]);ctx.lineTo(...crosses[j])};
+   if(crosses.length===2)connect(0,1);
+   else if(crosses.length===4){if((a>=level)===((a+b+c+d)/4>=level)){connect(0,1);connect(2,3)}else{connect(0,3);connect(1,2)}}
+  }
+  ctx.stroke();
+ }
 }
 
 function showInspection(view){

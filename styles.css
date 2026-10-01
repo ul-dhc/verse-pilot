@@ -79,8 +79,8 @@
 @media(max-width:500px){.research-view-tabs{display:grid;grid-template-columns:1fr 1fr}.sensory-filter-disclosure>summary{padding:11px}.sensory-filter-disclosure>summary span{font-size:10px}}
 
 /* Accent-led palette: mint, blue, apricot, coral, gold, lavender and cyan. */
-:root{--vision:#f0e5b9;--hearing:#cddff8;--body:#f8ddc5;--smell:#f7d0da;--taste:#c4eee5;--orientation:#e2d7f2;--other:#c4eaf0}
-.filters [name=mode][value=vision]~.dot{background:#887018}.filters [name=mode][value=hearing]~.dot{background:#2169bf}.filters [name=mode][value=body]~.dot{background:#aa5b22}.filters [name=mode][value=smell]~.dot{background:#b63e61}.filters [name=mode][value=taste]~.dot{background:#087d70}.filters [name=mode][value=orientation]~.dot{background:#7955aa}.filters [name=mode][value=other]~.dot{background:#087c90}
+:root{--vision:#f0e5b9;--hearing:#e5dcfa;--body:#f8ddc5;--smell:#f7d0da;--taste:#c4eee5;--orientation:#cddff8;--other:#c4eaf0}
+.filters [name=mode][value=vision]~.dot{background:#887018}.filters [name=mode][value=hearing]~.dot{background:#7550ba}.filters [name=mode][value=body]~.dot{background:#aa5b22}.filters [name=mode][value=smell]~.dot{background:#b63e61}.filters [name=mode][value=taste]~.dot{background:#087d70}.filters [name=mode][value=orientation]~.dot{background:#2169bf}.filters [name=mode][value=other]~.dot{background:#087c90}
 #configuration.night .research-view-tabs button[aria-pressed=true]{background:#aad9d1;border-color:#aad9d1;color:#102d32;box-shadow:inset 0 -2px 0 #4fd1bd}
 #configuration.night #clear-tools-filters:not(:disabled){background:#aad9d1;border-color:#aad9d1;color:#102d32}
 
@@ -208,3 +208,6 @@ a.brand{color:inherit;text-decoration:none;cursor:pointer}a.brand:hover{color:#4
 .flow-tip-swatch{display:block;width:8px;height:8px;flex:none;border-radius:50%;margin:0;box-shadow:0 0 8px #ffffff14}
 .flow-tip-record{color:#58716b}.night .flow-tip-record{color:#b4c9c3}
 .flow-tip-position{font-size:11px;margin-top:2px;color:#647b76;font-variant-numeric:tabular-nums}.night .flow-tip-position{color:#a3b9b4}
+
+.heat-controls .heat-contour-toggle{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
+.heat-controls .heat-contour-toggle input{width:16px;height:16px;flex:none;accent-color:#559f98}
