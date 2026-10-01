@@ -100,7 +100,7 @@ $('#search').oninput=()=>{page=0;mapScope=null;update()};$('#uncertainty').oncha
 $("#corpus-summary").textContent = `${DATA.length} narratives · ${new Set(DATA.map(r=>r.collection)).size} collections · ${DATA.filter(r=>r.translation).length} English translations`;
 function initMap(){
  if(!window.L){$('#map-status').textContent='Map library unavailable. All texts remain available below.';return}
- map=L.map('corpus-map',{scrollWheelZoom:false,minZoom:3,maxZoom:14,zoomSnap:.25,zoomControl:true}).setView([62,19],innerWidth>1150?4.25:3.5);
+ map=L.map('corpus-map',{scrollWheelZoom:true,minZoom:3,maxZoom:14,zoomSnap:.25,zoomControl:true}).setView([62,19],innerWidth>1150?4.25:3.5);
  countryLayer=L.geoJSON(window.VERSE_COUNTRIES,{style:{color:'#263343',weight:.65,fillColor:'#142030',fillOpacity:1},interactive:false,smoothFactor:.5}).addTo(map);
  map.attributionControl.addAttribution('Overview: <a href="https://www.naturalearthdata.com/">Natural Earth</a>');
  for(const [name,lat,lon] of [['NORWAY',65,10],['SWEDEN',63,16],['FINLAND',65,26],['LATVIA',56.6,24.8],['ESTONIA',59,25],['BALTIC SEA',57.7,19]])L.marker([lat,lon],{interactive:false,keyboard:false,icon:L.divIcon({className:'country-label',html:name,iconSize:[90,20]})}).addTo(map);
