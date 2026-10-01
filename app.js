@@ -87,7 +87,7 @@ function original(r,parent,isTranslation=false){
 }
 function translation(r,parent){
  if(!r.translation)return;
- const section=el('section','translation-block');section.setAttribute('aria-label','English translation');section.append(el('h3','language-heading','English translation'),el('p','hint translation-status',`Working translation · Not reviewed by a human. ${r.translationEvents?.length?'Highlights retain existing alignments only where the original evidence span and sensory modes are unchanged. Other revised passages are not aligned.':'Revised sensory annotations are not yet aligned to this translation.'}`));
+ const section=el('section','translation-block');section.setAttribute('aria-label','English translation');section.append(el('h3','language-heading','English translation'),el('p','hint translation-status',`Working translation · Not reviewed by a human. ${r.translationAlignedEvents===r.events.length?'Sensory highlights are provisionally aligned with the original annotations.':'Some sensory highlights are not yet aligned with the original annotations.'}`));
  original(r,section,true);
  if(r.translationNotes.length){const d=el('details');d.append(el('summary','', 'Translator notes'));r.translationNotes.forEach(n=>d.append(el('p','',n)));section.append(d)}parent.append(section);
 }
