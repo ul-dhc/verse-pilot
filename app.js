@@ -318,14 +318,24 @@ function renderEventFlow(root,entries){
  const byRecord=new Map();for(const x of entries){if(!byRecord.has(x.r.key))byRecord.set(x.r.key,[]);byRecord.get(x.r.key).push(x)}
  const records=[...byRecord.values()].sort((a,b)=>a[0].r.key.localeCompare(b[0].r.key));
  if(flowSelected&&!byRecord.has(flowSelected))flowSelected=null;
- root.append(el('h2','research-heading','Sensory progression'),el('p','research-note','One strand follows one narrative. Its colour changes between sensory modes. Hover over a point to highlight its strand. Select it to open the passage below the map.'));
- const toolbar=el('div','flow-toolbar'),status=el('span','',`${records.length} narratives · ${entries.length} events · all matching events shown`),clear=button('Show all strands',()=>{flowSelected=null;focus(null);renderActiveFilters();detail.replaceChildren(el('p','research-note','Select a point on any sensory axis to highlight its strand and read the passage.'))});clear.disabled=!flowSelected;toolbar.append(status,clear);root.append(toolbar);
+ root.append(el('h2','research-heading','Sensory progression'),el('p','research-note','One strand follows one narrative. Its colour changes between sensory modes. Hover over a point to preview its strand. Select it to keep the strand highlighted and open the passage below the map.'));
+ const toolbar=el('div','flow-toolbar'),status=el('div','flow-selection-status'),clear=button('Clear strand selection',()=>{
+  flowSelected=null;selectedEvent=null;hoveredKey=null;focus(null);
+  renderReader();if(mapReady)renderMap(applyFilters());renderActiveFilters();
+  detail.replaceChildren(el('p','research-note','Select a point on any sensory axis to highlight its strand and read the passage.'));
+  status.focus({preventScroll:true});
+ });status.tabIndex=-1;status.setAttribute('role','status');clear.setAttribute('aria-label','Clear strand selection and restore all matching strands. Keep current filters.');toolbar.append(el('span','',`${records.length} narratives · ${entries.length} events`),clear);root.append(toolbar,status);
  const chartWidth=Math.max(300,root.clientWidth);
  const lanes=[...Object.keys(modeNames),'multi'],svg=svgElement('svg',{viewBox:`0 0 ${chartWidth} 470`,class:'flow-svg flow-all',role:'group','aria-label':`${entries.length} sensory events across all ${records.length} matching narratives`}),defs=svgElement('defs',{}),x0=150,x1=chartWidth-15,y0=35,step=48;svg.append(defs);
  for(let i=0;i<lanes.length;i++){const y=y0+i*step,label=svgElement('text',{x:137,y:y+4,'text-anchor':'end',class:'flow-lane-label'});label.textContent=lanes[i]==='multi'?'Multiple modes':modeNames[lanes[i]];svg.append(svgElement('line',{x1:x0,x2:x1,y1:y,y2:y,stroke:'currentColor',opacity:.13,'pointer-events':'none'}),label)}
  const groups=[],hitTargets=[],detail=el('div','flow-detail');detail.setAttribute('aria-live','polite');
  function showDetail(r,e){detail.replaceChildren();detail.append(el('p','eyebrow',`${collections[r.collection]} · ${r.id}`),el('strong','',r.title),el('p','research-note',`${byRecord.get(r.key).length} matching events · selected: ${e.modalities.join(' + ')}`),el('blockquote','',e.span),button('Read highlighted passage',()=>chooseEvent(r,e)))}
- function focus(key){clear.disabled=!flowSelected;for(const g of groups){const active=g.dataset.narrative===key;g.style.opacity=key?(active?'1':'.32'):'1';g.classList.toggle('flow-focused',active)}}
+ function focus(key){
+  clear.hidden=!flowSelected;
+  const current=byRecord.get(key)?.[0].r;
+  status.textContent=current?`${key===flowSelected?'Selected':'Preview'}: ${collections[current.collection]} ${current.id}`:'All matching strands shown';
+  for(const g of groups){const active=g.dataset.narrative===key;g.style.opacity=key?(active?'1':'.32'):'1';g.classList.toggle('flow-focused',active)}
+ }
  let gi=0;for(const list of records){const r=list[0].r,es=[...list].sort((a,b)=>a.e.start-b.e.start||a.e.end-b.e.end),group=svgElement('g',{'data-narrative':r.key,class:'flow-strand'});groups.push(group);
   let hash=0;for(const c of r.key)hash=(hash*31+c.charCodeAt(0))>>>0;const jitter=(hash%1001)/1000*22-11;
   const len=Math.max(1,Array.from(r.text).length),points=es.map(({e})=>({e,x:x0+(x1-x0)*e.start/len,y:y0+step*lanes.indexOf(e.groups.length>1?'multi':e.groups[0])+jitter}));
