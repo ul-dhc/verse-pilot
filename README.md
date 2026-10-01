@@ -1,2 +1,2 @@
-# [pilot] VERSE — Vernacular Sensorium
+# [pilot] VERSE – Vernacular Sensorium
 
