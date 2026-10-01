@@ -194,3 +194,6 @@ a.brand{color:inherit;text-decoration:none;cursor:pointer}a.brand:hover{color:#4
 
 /* Keep hover feedback from moving the flow points beneath the pointer. */
 .flow-selection-status{font-size:13px;line-height:1.6;min-height:1.6em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);margin:-6px 0 10px}.night .flow-selection-status{color:#b2c6c0}
+
+/* Keep the visible dot centred in a larger, accessible click target at every zoom. */
+.event-map-dot{display:grid;place-items:center}

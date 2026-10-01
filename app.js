@@ -120,7 +120,7 @@ function initMap(){
   if(mapScope instanceof Set){mapScope=null}
   update();
  });
- $('#fit-map').onclick=()=>{const pts=applyFilters().flatMap(r=>r.locations.map(l=>[l.lat,l.lon]));if(pts.length)map.fitBounds(pts,{padding:[35,35],maxZoom:9})};
+ $('#fit-map').onclick=()=>{const records=applyFilters(),pts=records.flatMap(r=>r.locations.map(l=>[l.lat,l.lon]));if(mapView==='senses'&&eventMarks==='events')for(const group of eventMapLayout(records))for(const entry of group.entries)pts.push(entry.position);if(pts.length)map.fitBounds(pts,{padding:[35,35],maxZoom:9})};
  $('#all-locations').onclick=()=>{mapScope=null;update()};
  $('#unmapped').onclick=()=>{mapScope='unmapped';update()};
  $('#detailed-map').onchange=()=>{if($('#detailed-map').checked){if(location.protocol==='file:'){$('#detailed-map').checked=false;$('#map-status').textContent='The detailed basemap is available in the local preview or on GitHub Pages. The overview works offline.';return}baseTiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);baseTiles.on('tileerror',()=>{$('#map-status').textContent='Detailed tiles could not load. Turn off the detailed basemap to use the built-in overview.'})}else if(baseTiles)map.removeLayer(baseTiles)};
@@ -177,17 +177,28 @@ function chooseEvent(r,e){
 }
 
 function eventMapGroups(records){const groups=new Map();for(const entry of eventEntries(records)){const loc=entry.r.locations[0];if(!loc)continue;const key=`${loc.lat},${loc.lon}`;if(!groups.has(key))groups.set(key,{loc,entries:[]});groups.get(key).entries.push(entry)}return [...groups.values()]}
+// Fix the visual spread in projected coordinates at the overview zoom. Rebuilding
+// screen-pixel offsets after zooming makes dots snap back and move away from the cursor.
+function eventMapLayout(records){
+ const referenceZoom=4.25,spread=Number($('#event-spread').value),golden=Math.PI*(3-Math.sqrt(5));
+ return eventMapGroups(records).map(({loc,entries})=>{
+  const origin=map.project([loc.lat,loc.lon],referenceZoom);
+  entries.sort((a,b)=>(a.r.key+a.e.id).localeCompare(b.r.key+b.e.id));
+  return {loc,entries:entries.map((entry,i)=>{
+   const radius=entries.length===1?12:12+spread*2.8*Math.sqrt(i+1),angle=i*golden;
+   return {...entry,position:map.unproject(L.point(origin.x+Math.cos(angle)*radius,origin.y+Math.sin(angle)*radius),referenceZoom)};
+  })};
+ });
+}
 function renderEventMap(records,background=false){
- const all=eventEntries(records),groups=eventMapGroups(records),mappedCount=groups.reduce((n,g)=>n+g.entries.length,0);
+ const all=eventEntries(records),groups=eventMapLayout(records),mappedCount=groups.reduce((n,g)=>n+g.entries.length,0);
  if(!background)$('#map-count').textContent=`${mappedCount} mapped events · ${all.length-mappedCount} without coordinates`;
  if(!background)$('#map-explanation').textContent='One dot = one sensory event. Fine spokes lead to its source-place anchor; spread is visual, not geographic. Multicoloured dots have multiple modes. Select a dot to read its passage; select a place ring to explore its events. Click an empty area of the map to clear the selection.';
- const spread=Number($('#event-spread').value),golden=Math.PI*(3-Math.sqrt(5));
+ const dotSize=Math.min(14,7+Math.max(0,map.getZoom()-4.25)*1.2),hitSize=Math.max(18,dotSize+8);
  for(const {loc,entries} of groups){
-  const origin=map.latLngToLayerPoint([loc.lat,loc.lon]);
-  entries.sort((a,b)=>(a.r.key+a.e.id).localeCompare(b.r.key+b.e.id));
-  entries.forEach(({r,e},i)=>{const radius=entries.length===1?12:12+spread*2.8*Math.sqrt(i+1),angle=i*golden,position=map.layerPointToLatLng(L.point(origin.x+Math.cos(angle)*radius,origin.y+Math.sin(angle)*radius)),colour=eventColour(e);
+  entries.forEach(({r,e,position})=>{const colour=eventColour(e);
    L.polyline([[loc.lat,loc.lon],position],{color:colour,weight:.75,opacity:background?.06:.38,interactive:false}).addTo(markers);
-   const dot=L.marker(position,{icon:L.divIcon({className:'event-map-dot'+(background?' map-context-dot':''),html:`<span style="background:${eventGradient(e)}"></span>`,iconSize:[9,9],iconAnchor:[4.5,4.5]}),keyboard:!background,interactive:!background,opacity:background?.24:1,title:`${e.id} · ${e.modalities.join(', ')}`}).addTo(markers);
+   const dot=L.marker(position,{icon:L.divIcon({className:'event-map-dot'+(background?' map-context-dot':''),html:`<span style="background:${eventGradient(e)};width:${dotSize}px;height:${dotSize}px"></span>`,iconSize:[hitSize,hitSize],iconAnchor:[hitSize/2,hitSize/2]}),keyboard:!background,interactive:!background,opacity:background?.24:1,title:`${e.id} · ${e.modalities.join(', ')}`}).addTo(markers);
    if(background){dot.getElement().removeAttribute('title');dot.getElement().setAttribute('aria-hidden','true');return}
    const isSelected=selectedEvent?.r.key===r.key&&selectedEvent?.e.id===e.id;
    dot.getElement().classList.toggle('is-selected',isSelected);dot.getElement().setAttribute('aria-pressed',String(isSelected));
