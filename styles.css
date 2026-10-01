@@ -163,7 +163,7 @@ a.brand{color:inherit;text-decoration:none;cursor:pointer}a.brand:hover{color:#4
 
 .heat-scale{display:inline-block;width:160px;height:9px;border-radius:999px;background:linear-gradient(90deg,#4171a950,#2fa3ac,#72dcb6,#f7df89)}.heat-hit{border:0!important;background:transparent!important;box-shadow:none!important}.heat-hit:focus-visible{outline:2px solid #9bd6c6;outline-offset:3px;border-radius:50%}
 
-.heat-controls{display:flex;align-items:center;gap:10px;padding:6px 0 12px;font-size:12px;color:#526d71}.heat-controls[hidden]{display:none}.heat-controls label{font-weight:600}.heat-controls input{width:140px;max-width:35vw;accent-color:#559f98}.heat-controls output{font-variant-numeric:tabular-nums;min-width:38px}.heat-controls span{font-size:11px}
+.heat-controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px 24px;padding:6px 0 12px;font-size:13px;color:#526d71}.heat-controls[hidden]{display:none}.heat-control{display:grid;grid-template-columns:auto auto minmax(70px,1fr) auto 46px;align-items:center;gap:8px;flex:1 1 300px;min-width:0}.heat-controls label{font-weight:600}.heat-controls input{width:100%;min-width:0;margin:0;accent-color:#559f98}.heat-controls output{font-variant-numeric:tabular-nums;white-space:nowrap}.heat-controls span{font-size:12px}
 
 /* One map tooltip, with predictable width and quiet hierarchy. */
 #corpus-map .leaflet-tooltip{width:max-content;min-width:150px;max-width:250px;white-space:normal;overflow-wrap:normal;word-break:normal;padding:10px 14px;border-radius:12px;font-size:12px;line-height:1.5;pointer-events:none;box-shadow:0 5px 18px #0002}

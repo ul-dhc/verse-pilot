@@ -110,6 +110,7 @@ function initMap(){
  $('#map-palette').onchange();
  $('#event-marks').onchange=()=>{eventMarks=$('#event-marks').value;renderMap(applyFilters())};
  $('#heat-intensity').oninput=()=>{$('#heat-intensity-value').textContent=$('#heat-intensity').value+'%';renderMap(applyFilters())};
+ $('#heat-radius').oninput=()=>{const value=$('#heat-radius').value;$('#heat-radius-value').textContent=value+' px';$('#heat-radius').setAttribute('aria-valuetext',value+' pixels');renderMap(applyFilters())};
  $('#event-spread').oninput=()=>renderMap(applyFilters());
  map.on('zoomend moveend',()=>renderMap(applyFilters()));
  map.on('click',ev=>{
@@ -203,12 +204,12 @@ function renderEventMap(records,background=false){
 function renderEventConcentration(records){
  const all=eventEntries(records),mapped=all.filter(x=>x.r.locations.length),sourceGroups=eventMapGroups(records);
  const cells=new Map(sourceGroups.map((group,i)=>[i,group]));
- const dark=$('#map-palette').value==='dark';
+ const dark=$('#map-palette').value==='dark',radius=Number($('#heat-radius').value);
  const legend=$('#map-legend');legend.replaceChildren(el('strong','','Sensory layers'));for(const [g,name] of Object.entries(modeNames)){const item=button(name,()=>{configModes=new Set([g]);$('#config-match').value='any';page=0;update()});const swatch=el('b');swatch.style.background=sensoryColours[g];item.prepend(swatch);item.className='heat-category';item.setAttribute('aria-pressed',String(configModes.size===1&&configModes.has(g)));legend.append(item)}legend.append(button('All modes',()=>{resetSensorySelection();page=0;update()}));
  $('#map-count').textContent=`${mapped.length} mapped events · ${all.length-mapped.length} without coordinates`;
- $('#map-explanation').textContent='Soft colour fields follow supplied source coordinates. Hue shows the strongest local sensory category; brightness shows coded event concentration. Nearby locations blend within a 24-pixel smoothing radius, a display choice rather than a geographic boundary or measure of accuracy. Select a category to inspect its layer. Approximate source places remain approximate.';
+ $('#map-explanation').textContent=`Soft colour fields follow supplied source coordinates. Hue shows the strongest local sensory category; brightness shows coded event concentration. Nearby locations blend within a ${radius}-pixel smoothing radius. Radius adjusts visual blending, not geographic distance or coordinate accuracy. Select a category to inspect its layer. Approximate source places remain approximate.`;
  const dimensions=map.getSize(),heat=document.createElement('canvas');heat.width=dimensions.x;heat.height=dimensions.y;
- const ctx=heat.getContext('2d'),radius=24,modes=Object.keys(modeNames),fields=modes.map(()=>new Float32Array(heat.width*heat.height)),intensity=Number($('#heat-intensity').value)/100;
+ const ctx=heat.getContext('2d'),modes=Object.keys(modeNames),fields=modes.map(()=>new Float32Array(heat.width*heat.height)),intensity=Number($('#heat-intensity').value)/100;
  for(const {loc,entries} of sourceGroups){
   const point=map.latLngToContainerPoint([loc.lat,loc.lon]),weights=modes.map(g=>entries.filter(x=>x.e.groups.includes(g)).length);
   for(let y=Math.max(0,Math.floor(point.y-radius));y<Math.min(heat.height,point.y+radius);y++)for(let x=Math.max(0,Math.floor(point.x-radius));x<Math.min(heat.width,point.x+radius);x++){
