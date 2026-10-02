@@ -3,6 +3,7 @@ const DATA=window.VERSE_DATA.records, $=s=>document.querySelector(s);
 const evidenceById=new Map((window.VERSE_DATA.evidence||[]).map(e=>[e.evidence_id,e]));
 const collections={LV:'Latvian',NO:'Norwegian',FI:'Finnish',SE:'Swedish'};
 const modeNames={vision:'Vision',hearing:'Hearing',body:'Bodily experience',smell:'Smell',taste:'Taste',orientation:'Orientation / space',other:'Other perception'};
+const translatedExamples=DATA.filter(r=>r.translation);
 const langs={LV:'lv',NO:'no',FI:'fi',SE:'sv'};
 let map,mapReady=false,mapScope=null,markers,baseTiles;
 const collectionColours={LV:'#b6a3cc',NO:'#97bcae',FI:'#d6b796',SE:'#9ebacf'};
@@ -22,7 +23,7 @@ function chartLabelColour(fill){
 }
 let mapView='density',countryLayer,selectedEvent=null;
 let densitySort='density',densityShowAll=true,densitySelected=null;
-document.addEventListener('click',ev=>{if(densitySelected&&!ev.target.closest('.density-list')){densitySelected=null;document.querySelector('.density-list')?.classList.remove('has-selection');document.querySelectorAll('.density-row.is-selected').forEach(row=>{row.classList.remove('is-selected');row.setAttribute('aria-pressed','false')});const caption=document.querySelector('.density-caption');if(caption){caption.querySelector('strong').textContent='Explore the weave';caption.querySelector('span').textContent='Hover or focus a strand to inspect a narrative · click to read'}}},true);
+document.addEventListener('click',ev=>{if(densitySelected&&!ev.target.closest('.density-list,[data-view-source]')){densitySelected=null;document.querySelector('#research-view [data-view-source]')?.remove();document.querySelector('.density-list')?.classList.remove('has-selection');document.querySelectorAll('.density-row.is-selected').forEach(row=>{row.classList.remove('is-selected');row.setAttribute('aria-pressed','false')});const caption=document.querySelector('.density-caption');if(caption){caption.querySelector('strong').textContent='Explore the weave';caption.querySelector('span').textContent='Hover or focus a strand to inspect a narrative · click to select'}}},true);
 let configModes=new Set(Object.keys(modeNames)),eventMarks='events',researchView='comparison',flowSelected=null;
 let selected='LV:130801007',tab='original',highlight=true,filtered=DATA;
 let showResponses=false,showCandidates=false;
@@ -30,6 +31,29 @@ function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className
 function tone(node,g){node.dataset.mode=g;node.style.setProperty('--tone',`var(--${g})`);return node}
 function chip(text,g){return tone(el('span','chip',text),g||'other')}
 function button(text,action){const b=el('button','',text);b.type='button';b.onclick=action;return b}
+function initExampleBrowser(){
+ const select=$('#translated-example');
+ for(const [key,name] of Object.entries(collections)){
+  const group=el('optgroup');group.label=name;
+  for(const r of translatedExamples.filter(r=>r.collection===key)){const option=el('option','',`${r.id} · ${r.title}`);option.value=r.key;group.append(option)}
+  select.append(group);
+ }
+ function choose(key){
+  if(!translatedExamples.some(r=>r.key===key))return;
+  selected=key;selectedEvent=null;flowSelected=null;densitySelected=null;tab='original';highlight=true;
+  renderReader();renderConfigurations();if(mapReady)renderMap(applyFilters());renderActiveFilters();
+ }
+ select.onchange=()=>choose(select.value);
+ $('#example-previous').onclick=()=>choose(translatedExamples[translatedExamples.findIndex(r=>r.key===selected)-1]?.key);
+ $('#example-next').onclick=()=>choose(translatedExamples[translatedExamples.findIndex(r=>r.key===selected)+1]?.key);
+}
+function renderExampleNavigation(record){
+ const index=translatedExamples.findIndex(r=>r.key===record?.key);
+ $('#translated-example').value=index>=0?record.key:'';
+ $('#example-position').textContent=index>=0?`${index+1} / ${translatedExamples.length}`:`${translatedExamples.length} examples`;
+ $('#example-previous').disabled=index<=0;
+ $('#example-next').disabled=index<0||index===translatedExamples.length-1;
+}
 function check(container,value,label,count,group){const l=el('label','check'),i=el('input');i.type='checkbox';i.value=value;i.name=group;i.onchange=()=>{mapScope=null;update()};l.append(i);if(group==='mode')l.append(tone(el('span','dot'),value));l.append(document.createTextNode(label));if(count!==undefined)l.append(el('span','count',count));container.append(l)}
 Object.entries(collections).forEach(([k,v])=>check($('#collections'),k,v,150,'collection'));
 Object.entries(modeNames).forEach(([k,v])=>check($('#modes'),k,v,undefined,'mode'));
@@ -105,8 +129,8 @@ function translation(r,parent){
 
 function contexts(r,parent){const section=el('div','context');section.append(el('h3','', 'Narrative context'));const dl=el('dl');for(const [k,label] of [['place','Place'],['time','Time'],['movement','Movement']]){dl.append(el('dt','',label),el('dd','',r.context[k]||'Not coded'))}section.append(dl,el('p','hint','Contexts recorded for sensory events. Event details show their supporting evidence.'));parent.append(section)}
 function source(r,parent){parent.append(el('h3','', 'Source reference'),el('p','',r.source||'No source reference supplied for this record.'),el('p','',`Record: ${r.id} · ${collections[r.collection]}`),el('p','',`Source category: ${r.category||'Not supplied'}`));for(const loc of r.locations||[])parent.append(el('p','',`Map: ${loc.label} · ${loc.precision}. ${loc.provenance}`));if(r.place)parent.append(el('p','',`Collection place: ${r.place}`));if(r.annotationNote)parent.append(el('p','',`Annotation note: ${r.annotationNote}`));parent.append(el('p','hint','Source categories and collection places are metadata, not inferred narrative identities or event locations.'))}
-function renderReader(){renderMetadata();const parent=$('#reader');parent.replaceChildren();const r=DATA.find(x=>x.key===selected);if(!r){parent.append(el('p','empty','Select different filters to browse the collection.'));return}const top=el('div','reader-top');top.append(el('p','eyebrow',`${collections[r.collection].toUpperCase()} COLLECTION · ${r.id}`));parent.append(top,el('h1','',r.title),el('div','reader-meta',`${r.events.length} sensory events · ${r.translation?'English translation available':'Original language'}`));const chips=el('div','chips');r.groups.forEach(g=>chips.append(chip(modeNames[g],g)));parent.append(chips);const tabs=el('div','tabs');for(const [id,label] of [['original','Text'],['source','Source information']]){const b=button(label,()=>{tab=id;renderReader()});b.className=tab===id?'active':'';b.setAttribute('aria-pressed',String(tab===id));tabs.append(b)}parent.append(tabs);if(tab==='original'){const row=el('div','toggle-row');row.append(el('span','hint','Select a highlighted passage to inspect its annotation.'));const label=el('label'),input=el('input');input.type='checkbox';input.checked=highlight;input.onchange=()=>{highlight=input.checked;renderReader()};label.append(input,document.createTextNode('Highlight'));row.append(label);parent.append(row);annotationLayers(r,parent);legend(parent);parent.append(el('h3','language-heading','Original'));original(r,parent);translation(r,parent);contexts(r,parent)}else if(tab==='english')translation(r,parent);else source(r,parent)}
-$('#search').oninput=()=>{mapScope=null;update()};$('#uncertainty').onchange=$('#translated').onchange=()=>{mapScope=null;update()};$('#reset').onclick=clearAllFilters;$('#browse').onclick=()=>{$('#corpus-map').scrollIntoView({behavior:'smooth',block:'center'});if(mapReady)map.invalidateSize()};$('#about').onclick=()=>$('#about-dialog').showModal();$('#close-about').onclick=()=>$('#about-dialog').close();initConfigurations();initMap();update();
+function renderReader(){renderMetadata();const parent=$('#reader');parent.replaceChildren();const r=DATA.find(x=>x.key===selected);renderExampleNavigation(r);$('#source-text-selection').textContent=r?`${collections[r.collection]} · ${r.id}`:'No matching narrative';if(!r){parent.append(el('p','empty','Select different filters to browse the collection.'));return}const top=el('div','reader-top');top.append(el('p','eyebrow',`${collections[r.collection].toUpperCase()} COLLECTION · ${r.id}`));parent.append(top,el('h1','',r.title),el('div','reader-meta',`${r.events.length} sensory events · ${r.translation?'English translation available':'Original language'}`));const chips=el('div','chips');r.groups.forEach(g=>chips.append(chip(modeNames[g],g)));parent.append(chips);const tabs=el('div','tabs');for(const [id,label] of [['original','Text'],['source','Source information']]){const b=button(label,()=>{tab=id;renderReader()});b.className=tab===id?'active':'';b.setAttribute('aria-pressed',String(tab===id));tabs.append(b)}parent.append(tabs);if(tab==='original'){const row=el('div','toggle-row');row.append(el('span','hint','Select a highlighted passage to inspect its annotation.'));const label=el('label'),input=el('input');input.type='checkbox';input.checked=highlight;input.onchange=()=>{highlight=input.checked;renderReader()};label.append(input,document.createTextNode('Highlight'));row.append(label);parent.append(row);annotationLayers(r,parent);legend(parent);parent.append(el('h3','language-heading','Original'));original(r,parent);translation(r,parent);contexts(r,parent)}else if(tab==='english')translation(r,parent);else source(r,parent)}
+$('#search').oninput=()=>{mapScope=null;update()};$('#uncertainty').onchange=$('#translated').onchange=()=>{mapScope=null;update()};$('#reset').onclick=clearAllFilters;$('#browse').onclick=()=>{$('#corpus-map').scrollIntoView({behavior:'smooth',block:'center'});if(mapReady)map.invalidateSize()};$('#about').onclick=()=>$('#about-dialog').showModal();$('#close-about').onclick=()=>$('#about-dialog').close();initExampleBrowser();initConfigurations();initMap();update();
 
 $("#corpus-summary").textContent = `${DATA.length} narratives · ${new Set(DATA.map(r=>r.collection)).size} collections · ${DATA.filter(r=>r.translation).length} English translations`;
 function initMap(){
@@ -199,12 +223,12 @@ function eventMarkerSymbol(e,size){
  }).join('');
  return `<svg class="event-glyph" aria-hidden="true" width="${side}" height="${side}" viewBox="0 0 ${side} ${side}" style="--event-colour:${eventColour(e)}">${shapes}<circle class="selection-ring" cx="${centre}" cy="${centre}" r="${radius+3}"/></svg>`;
 }
-function chooseEvent(r,e){
+function chooseEvent(r,e,openText=false){
  selected=r.key;selectedEvent={r,e};tab='original';highlight=true;
  if(!filtered.some(x=>x.key===r.key)){mapScope=null;update()}
- renderConfigurations();renderReader();showInspection('reader');if(mapReady)renderMap(applyFilters());renderActiveFilters();
+ renderConfigurations();renderReader();if(mapReady)renderMap(applyFilters());renderActiveFilters();
  const info=$('#reader .annotation');if(info)eventInfo(info,[e]);
- requestAnimationFrame(()=>{const passage=$('#reader mark.chosen');if(passage){passage.focus({preventScroll:true});passage.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'center'})}});
+ if(openText)showInspection('reader');
 }
 
 function eventMapGroups(records){const groups=new Map();for(const entry of eventEntries(records)){const loc=entry.r.locations[0];if(!loc)continue;const key=`${loc.lat},${loc.lon}`;if(!groups.has(key))groups.set(key,{loc,entries:[]});groups.get(key).entries.push(entry)}return [...groups.values()]}
@@ -224,7 +248,7 @@ function eventMapLayout(records){
 function renderEventMap(records,background=false){
  const all=eventEntries(records),groups=eventMapLayout(records),mappedCount=groups.reduce((n,g)=>n+g.entries.length,0);
  if(!background)$('#map-count').textContent=`${mappedCount} mapped events · ${all.length-mappedCount} without coordinates`;
- if(!background)$('#map-explanation').textContent='One dot = one sensory event. Fine spokes lead to its source-place anchor; spread is visual, not geographic. Multicoloured dots have multiple modes. Select a dot to read its passage; select a place ring to explore its events. Click an empty area of the map to clear the selection.';
+ if(!background)$('#map-explanation').textContent='One dot = one sensory event. Fine spokes lead to its source-place anchor; spread is visual, not geographic. Multicoloured dots have multiple modes. Select a dot to highlight an event; select a place ring to explore its events. Source texts can be opened separately below. Click an empty area of the map to clear the selection.';
  const dotSize=Math.min(15,8+Math.max(0,map.getZoom()-4.25)*1.2),hitSize=Math.max(20,dotSize+10);
  for(const {loc,entries} of groups){
   entries.forEach(({r,e,position})=>{const colour=eventColour(e);
@@ -233,7 +257,7 @@ function renderEventMap(records,background=false){
    if(background){dot.getElement().removeAttribute('title');dot.getElement().setAttribute('aria-hidden','true');return}
    const isSelected=selectedEvent?.r.key===r.key&&selectedEvent?.e.id===e.id;
    dot.getElement().classList.toggle('is-selected',isSelected);dot.getElement().setAttribute('aria-pressed',String(isSelected));
-   dot.getElement().removeAttribute('title');dot.getElement().setAttribute('aria-label',`${e.id} · ${e.modalities.join(', ')} · ${loc.label}. Open passage`);
+   dot.getElement().removeAttribute('title');dot.getElement().setAttribute('aria-label',`${e.id} · ${e.modalities.join(', ')} · ${loc.label}. Select event`);
    const eventTip=el('div','map-event-tip');eventTip.append(el('strong','',e.modalities.join(' · ')),el('span','map-tip-place',loc.label),el('span','map-tip-id',e.id));dot.bindTooltip(eventTip,{direction:'top',offset:[0,-8],className:'event-tooltip'});dot.on('click',()=>chooseEvent(r,e));dot.getElement().addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();ev.stopPropagation();chooseEvent(r,e)}});
   });
   if(background)continue;
@@ -330,8 +354,11 @@ function drawHeatContours(ctx,field,width,height,dark,intensity,colour){
 }
 
 function showInspection(view){
- $('#reader').hidden=false;
- if(view==='reader')return;
+ if(view==='reader'){
+  $('#source-text').open=true;
+  requestAnimationFrame(()=>{const target=$('#reader mark.chosen')||$('#reader');target.focus({preventScroll:true});target.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:target.matches('mark')?'center':'start'})});
+  return;
+ }
  $('#configuration').hidden=view!=='config';$('#metadata-panel').hidden=view!=='metadata';
  $('#show-config').setAttribute('aria-pressed',String(view==='config'));$('#show-metadata').setAttribute('aria-pressed',String(view==='metadata'));
 }
@@ -341,7 +368,7 @@ function renderMetadata(){
  panel.append(el('p','eyebrow',`${collections[r.collection]} · ${r.id}`),el('h2','',r.title));
  const stats=el('div','metadata-stats');stats.append(el('span','',`${r.events.length} sensory events`),el('span','',r.translation?'English available':'Original only'));panel.append(stats);
  const chips=el('div','chips');r.groups.forEach(g=>chips.append(chip(modeNames[g],g)));panel.append(chips);contexts(r,panel);source(r,panel);
- panel.append(button('Go to narrative',()=>{$('#reader').scrollIntoView({behavior:'smooth',block:'start'});$('#reader').focus({preventScroll:true})}));
+ panel.append(button('View source text',()=>showInspection('reader')));
 }
 
 function initConfigurations(){
@@ -372,7 +399,7 @@ function renderConfigurations(){
   });svg.append(svgElement('circle',{cx,cy,r:16,fill:'var(--constellation-centre)',stroke:themeToken('ui-border'),'stroke-width':1.2}),count);
  }
  container.append(svg);
- const detail=$('#config-event');detail.replaceChildren();if(selectedEvent){const {r,e}=selectedEvent;detail.append(el('p','eyebrow',`${collections[r.collection]} · ${e.id}`),el('p','',e.modalities.join(' + ')),el('blockquote','',e.span),el('p','hint',`Uncertainty: ${e.uncertainty} · ${e.kind}`),button('Read in narrative',()=>{selected=r.key;tab='original';renderReader();showInspection('reader');const info=$('#reader .annotation');if(info)eventInfo(info,[e])}));}else detail.append(el('p','hint','Choose an event on the map or in a constellation.'));
+ const detail=$('#config-event');detail.replaceChildren();if(selectedEvent){const {r,e}=selectedEvent;detail.append(el('p','eyebrow',`${collections[r.collection]} · ${e.id}`),el('p','',e.modalities.join(' + ')),el('p','hint',`Uncertainty: ${e.uncertainty} · ${e.kind}`),button('View source text',()=>chooseEvent(r,e,true)));}else detail.append(el('p','hint','Choose an event on the map or in a constellation.'));
 }
 
 function clearAllFilters(){document.querySelectorAll('.filters input[type=checkbox]').forEach(x=>x.checked=false);$('#search').value='';$('#uncertainty').value='';resetSensorySelection();$('#config-group').value='modes';flowSelected=null;densitySelected=null;selectedEvent=null;mapScope=null;update()}
@@ -414,18 +441,18 @@ function renderEventFlow(root,entries){
  const byRecord=new Map();for(const x of entries){if(!byRecord.has(x.r.key))byRecord.set(x.r.key,[]);byRecord.get(x.r.key).push(x)}
  const records=[...byRecord.values()].sort((a,b)=>a[0].r.key.localeCompare(b[0].r.key));
  if(flowSelected&&!byRecord.has(flowSelected))flowSelected=null;
- root.append(el('h2','research-heading','Sensory progression'),el('p','research-note','One strand follows one narrative. Its colour changes between sensory modes. Hover over a point to preview its strand. Select it to keep the strand highlighted and open the passage below the map.'));
+ root.append(el('h2','research-heading','Sensory progression'),el('p','research-note','One strand follows one narrative. Its colour changes between sensory modes. Hover over a point to preview its strand. Select it to keep the strand highlighted. Source text is available separately when needed.'));
  const toolbar=el('div','flow-toolbar'),status=el('div','flow-selection-status'),clear=button('Clear strand selection',()=>{
   flowSelected=null;selectedEvent=null;hoveredKey=null;focus(null);
   renderReader();if(mapReady)renderMap(applyFilters());renderActiveFilters();
-  detail.replaceChildren(el('p','research-note','Select a point on any sensory axis to highlight its strand and read the passage.'));
+  detail.replaceChildren(el('p','research-note','Select a point on any sensory axis to highlight its strand.'));
   status.focus({preventScroll:true});
  });status.tabIndex=-1;status.setAttribute('role','status');clear.setAttribute('aria-label','Clear strand selection and restore all matching strands. Keep current filters.');toolbar.append(el('span','',`${records.length} narratives · ${entries.length} events`),clear);root.append(toolbar,status);
  const chartWidth=Math.max(300,root.clientWidth);
  const lanes=[...Object.keys(modeNames),'multi'],svg=svgElement('svg',{viewBox:`0 0 ${chartWidth} 470`,class:'flow-svg flow-all',role:'group','aria-label':`${entries.length} sensory events across all ${records.length} matching narratives`}),defs=svgElement('defs',{}),x0=150,x1=chartWidth-15,y0=35,step=48;svg.append(defs);
  for(let i=0;i<lanes.length;i++){const y=y0+i*step,label=svgElement('text',{x:137,y:y+4,'text-anchor':'end',class:'flow-lane-label'});label.textContent=lanes[i]==='multi'?'Multiple modes':modeNames[lanes[i]];svg.append(svgElement('line',{x1:x0,x2:x1,y1:y,y2:y,stroke:'currentColor',opacity:.13,'pointer-events':'none'}),label)}
  const groups=[],hitTargets=[],detail=el('div','flow-detail');detail.setAttribute('aria-live','polite');
- function showDetail(r,e){detail.replaceChildren();detail.append(el('p','eyebrow',`${collections[r.collection]} · ${r.id}`),el('strong','',r.title),el('p','research-note',`${byRecord.get(r.key).length} matching events · selected: ${e.modalities.join(' + ')}`),el('blockquote','',e.span),button('Read highlighted passage',()=>chooseEvent(r,e)))}
+ function showDetail(r,e){detail.replaceChildren();detail.append(el('p','eyebrow',`${collections[r.collection]} · ${r.id}`),el('strong','',r.title),el('p','research-note',`${byRecord.get(r.key).length} matching events · selected: ${e.modalities.join(' + ')}`),button('View source text',()=>chooseEvent(r,e,true)))}
  function focus(key){
   clear.hidden=!flowSelected;
   const current=byRecord.get(key)?.[0].r;
@@ -488,7 +515,7 @@ function renderEventFlow(root,entries){
   if(hit){ev.preventDefault();ev.stopImmediatePropagation();hit.select()}
  },true);
  root.append(chart,el('p','research-note',`${filtered.length-records.length} narratives in the current selection have no matching sensory events. Single-event narratives appear as dots. Each event is positioned at the start of its first evidence passage, even when it has several passages. Position is not elapsed time or causation; small vertical offsets separate overlapping strands.`),detail);
- if(flowSelected){const list=byRecord.get(flowSelected);showDetail(list[0].r,list.find(x=>x.e.id===selectedEvent?.e.id)?.e||list[0].e)}else detail.append(el('p','research-note','Select a point on any sensory axis to highlight its strand and read the passage.'));focus(flowSelected);
+ if(flowSelected){const list=byRecord.get(flowSelected);showDetail(list[0].r,list.find(x=>x.e.id===selectedEvent?.e.id)?.e||list[0].e)}else detail.append(el('p','research-note','Select a point on any sensory axis to highlight its strand.'));focus(flowSelected);
 }
 
 function renderTextDensity(root,entries){
@@ -496,17 +523,18 @@ function renderTextDensity(root,entries){
  const rows=[...grouped.values()].map(x=>({...x,characters:Array.from(x.r.text).length})).filter(x=>x.characters>0);
  for(const x of rows)x.density=x.events.length*1000/x.characters;
  rows.sort((a,b)=>(densitySort==='density'?b.density-a.density:b.events.length-a.events.length)||b.events.length-a.events.length||a.r.key.localeCompare(b.r.key));
- root.append(el('h2','research-heading','Where the senses gather'),el('p','research-note','Rank narratives by annotation density or total sensory events. Select a bar to read its highlighted passages.'));
+ root.append(el('h2','research-heading','Where the senses gather'),el('p','research-note','Rank narratives by annotation density or total sensory events. Select a bar to highlight a narrative. Open its source text only when needed.'));
  const controls=el('div','density-controls');controls.setAttribute('role','group');controls.setAttribute('aria-label','Rank narratives by');
  for(const [key,label] of [['density','Density'],['events','Event count']]){const b=button(label,()=>{densitySort=key;renderConfigurations()});b.setAttribute('aria-pressed',String(densitySort===key));controls.append(b)}root.append(controls);
  researchLegend(root);
  const top=rows[0],summary=el('div','density-summary');summary.append(el('strong','',top?(densitySort==='density'?top.density.toFixed(1):top.events.length):'0'),el('span','',densitySort==='density'?'Highest density · events / 1,000 characters':'Highest event count · one narrative'));root.append(summary);
  root.append(el('p','research-note',`${rows.length} narratives with matching events · ${densityShowAll?'all ranks':'top '+Math.min(20,rows.length)} shown`));
- const caption=el('div','density-caption');const captionTitle=el('strong','','Explore the weave'),captionMeta=el('span','','Hover or focus a strand to inspect a narrative · click to read');caption.append(captionTitle,captionMeta);root.append(caption);
+ const caption=el('div','density-caption');const captionTitle=el('strong','','Explore the weave'),captionMeta=el('span','','Hover or focus a strand to inspect a narrative · click to select');caption.append(captionTitle,captionMeta);root.append(caption);
+ const selectedRow=rows.find(x=>x.r.key===densitySelected);if(selectedRow){const read=button('View source text',()=>chooseEvent(selectedRow.r,selectedRow.events[0],true));read.dataset.viewSource='';root.append(read)}
  const list=el('div','density-list'),max=Math.max(1,...rows.map(x=>densitySort==='density'?x.density:x.events.length));
  rows.slice(0,densityShowAll?rows.length:20).forEach((x,i)=>{
   const value=densitySort==='density'?x.density:x.events.length,b=button('',()=>{densitySelected=x.r.key;chooseEvent(x.r,[...x.events].sort((a,b)=>a.start-b.start)[0])});b.className='density-row'+(densitySelected===x.r.key?' is-selected':'');b.setAttribute('aria-pressed',String(densitySelected===x.r.key));b.dataset.record=x.r.key;const describe=()=>{captionTitle.textContent=`${String(i+1).padStart(2,'0')} · ${x.r.title}`;captionMeta.textContent=`${collections[x.r.collection]} · ${x.r.id} · ${x.events.length} events · ${x.density.toFixed(1)} / 1,000 characters`};b.onpointerenter=describe;b.onfocus=describe;if(densitySelected===x.r.key)describe();
-  b.setAttribute('aria-label',`${i+1}. ${x.r.title}. ${collections[x.r.collection]}, ${x.r.id}. ${x.density.toFixed(1)} events per 1,000 characters, ${x.events.length} events, ${x.characters} characters. Open text.`);
+  b.setAttribute('aria-label',`${i+1}. ${x.r.title}. ${collections[x.r.collection]}, ${x.r.id}. ${x.density.toFixed(1)} events per 1,000 characters, ${x.events.length} events, ${x.characters} characters. Select narrative.`);
   const heading=el('div','density-heading');heading.append(el('span','density-rank',String(i+1).padStart(2,'0')),el('strong','',x.r.title),el('span','density-value',densitySort==='density'?value.toFixed(1):value));
   const meta=el('div','density-meta',`${collections[x.r.collection]} · ${x.r.id} · ${x.events.length} events / ${x.characters.toLocaleString('en')} characters`),track=el('div','density-track'),bar=el('div','density-bar');bar.style.width=(100*value/max)+'%';
   for(const g of Object.keys(modeNames)){const weight=x.events.reduce((n,e)=>n+(e.groups.includes(g)?1/e.groups.length:0),0);if(!weight)continue;const segment=el('span');segment.style.width=(100*weight/x.events.length)+'%';segment.style.background=sensoryColours[g];bar.append(segment)}

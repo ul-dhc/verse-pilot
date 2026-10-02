@@ -357,3 +357,21 @@ html[data-theme] #configuration #config-modes button[aria-pressed=true],
 html[data-theme] #map-legend .heat-category[aria-pressed=true]{background:color-mix(in srgb,var(--mode-colour) 8%,transparent);border-color:var(--mode-colour);color:var(--text-primary);box-shadow:none}
 html[data-theme] #configuration #clear-tools-filters:not(:disabled){background:var(--ui-selected-bg);border-color:var(--ui-active);color:var(--text-primary);box-shadow:none}
 html[data-theme] #configuration #clear-tools-filters:not(:disabled):is(:hover,:focus-visible){background:var(--ui-selected-bg);border-color:var(--ui-hover);color:var(--text-primary);box-shadow:none}
+/* Reading is an optional layer below the visual exploration. */
+.source-text{margin:0;border-top:1px solid var(--ui-border-soft);background:var(--bg-app)}
+.source-text>summary{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;padding:15px 22px;list-style:none;color:var(--text-secondary);font-size:13px;font-weight:400}
+.source-text>summary::-webkit-details-marker{display:none}
+.source-text>summary::before{content:'›';font-size:20px;line-height:1;transition:transform .15s}
+.source-text[open]>summary::before{transform:rotate(90deg)}
+.source-text>summary strong{font-weight:600;color:var(--text-primary)}
+.source-text>summary span{font-size:12px;margin-left:auto}
+.source-text>summary:hover{background:var(--bg-secondary)}
+.source-text>.reader{border-top:1px solid var(--ui-border-soft);padding:24px 32px}
+.example-browser{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:12px;padding:16px 22px;border-top:1px solid var(--ui-border-soft)}
+.example-browser label{min-width:0;font-size:13px;color:var(--text-secondary)}
+.example-browser select{margin-top:6px}
+.example-pagination{display:flex;align-items:center;gap:10px;white-space:nowrap;font-size:13px;color:var(--text-secondary)}
+.example-pagination button{font-size:13px;padding:8px 10px}
+.source-text .narrative{max-width:78ch}
+[data-view-source]{margin:0 0 10px;font-size:12px}
+@media(max-width:600px){.source-text>.reader{padding:24px 18px}.source-text>summary{padding-inline:18px}.example-browser{grid-template-columns:1fr;padding-inline:18px}.example-pagination{justify-content:space-between}}
