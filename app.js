@@ -3,9 +3,12 @@ const DATA=window.VERSE_DATA.records, $=s=>document.querySelector(s);
 const evidenceById=new Map((window.VERSE_DATA.evidence||[]).map(e=>[e.evidence_id,e]));
 const collections={LV:'Latvian',NO:'Norwegian',FI:'Finnish',SE:'Swedish'};
 const modeNames={vision:'Vision',hearing:'Hearing',body:'Bodily experience',smell:'Smell',taste:'Taste',orientation:'Orientation / space',other:'Other perception'};
-const translatedExamples=DATA.filter(r=>r.translation);
+// Reading is limited to the revised examples; all records still support visualisations.
+function narrativeLength(r){return r.textLength??Array.from(r.text||'').length}
+function canReadRecord(r){return Boolean(r?.translation&&r?.reviewAnnotations)}
+const translatedExamples=DATA.filter(canReadRecord);
 const langs={LV:'lv',NO:'no',FI:'fi',SE:'sv'};
-let map,mapReady=false,mapScope=null,markers,baseTiles;
+let map,mapReady=false,mapScope=null,markers,baseTiles,EventMapMarker;
 const collectionColours={LV:'#b6a3cc',NO:'#97bcae',FI:'#d6b796',SE:'#9ebacf'};
 // CSS tokens are the single colour source for HTML, SVG and canvas marks.
 const sensoryTokens={vision:'vision',hearing:'hearing',body:'bodily',smell:'smell',taste:'taste',orientation:'space',other:'other'};
@@ -25,8 +28,9 @@ let mapView='density',countryLayer,selectedEvent=null;
 let densitySort='density',densityShowAll=true,densitySelected=null;
 document.addEventListener('click',ev=>{if(densitySelected&&!ev.target.closest('.density-list,[data-view-source]')){densitySelected=null;document.querySelector('#research-view [data-view-source]')?.remove();document.querySelector('.density-list')?.classList.remove('has-selection');document.querySelectorAll('.density-row.is-selected').forEach(row=>{row.classList.remove('is-selected');row.setAttribute('aria-pressed','false')});const caption=document.querySelector('.density-caption');if(caption){caption.querySelector('strong').textContent='Explore the weave';caption.querySelector('span').textContent='Hover or focus a strand to inspect a narrative · click to select'}}},true);
 let configModes=new Set(Object.keys(modeNames)),eventMarks='events',researchView='comparison',flowSelected=null;
-let selected='LV:130801007',tab='original',highlight=true,filtered=DATA;
-let showResponses=false,showCandidates=false;
+let selected=translatedExamples[0]?.key,tab='original',highlight=true,filtered=DATA;
+let readingSelected=selected;
+let showResponses=false,showCandidates=false,showObservations=false;
 function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
 function tone(node,g){node.dataset.mode=g;node.style.setProperty('--tone',`var(--${g})`);return node}
 function chip(text,g){return tone(el('span','chip',text),g||'other')}
@@ -44,8 +48,8 @@ function initExampleBrowser(){
   renderReader();renderConfigurations();if(mapReady)renderMap(applyFilters());renderActiveFilters();
  }
  select.onchange=()=>choose(select.value);
- $('#example-previous').onclick=()=>choose(translatedExamples[translatedExamples.findIndex(r=>r.key===selected)-1]?.key);
- $('#example-next').onclick=()=>choose(translatedExamples[translatedExamples.findIndex(r=>r.key===selected)+1]?.key);
+ $('#example-previous').onclick=()=>choose(translatedExamples[translatedExamples.findIndex(r=>r.key===readingSelected)-1]?.key);
+ $('#example-next').onclick=()=>choose(translatedExamples[translatedExamples.findIndex(r=>r.key===readingSelected)+1]?.key);
 }
 function renderExampleNavigation(record){
  const index=translatedExamples.findIndex(r=>r.key===record?.key);
@@ -60,27 +64,32 @@ Object.entries(modeNames).forEach(([k,v])=>check($('#modes'),k,v,undefined,'mode
 function legend(parent){const l=el('div','legend');Object.entries(modeNames).forEach(([g,name])=>{const s=el('span');s.append(tone(el('i','dot'),g),document.createTextNode(name));l.append(s)});parent.append(l)}
 function defaultSensorySelection(){return $('#config-match').value==='any'&&configModes.size===Object.keys(modeNames).length}
 function resetSensorySelection(){configModes=new Set(Object.keys(modeNames));$('#config-match').value='any'}
-function applyFilters(ignoreCollection=false){const cs=[...document.querySelectorAll('[name=collection]:checked')].map(x=>x.value),ms=[...document.querySelectorAll('[name=mode]:checked')].map(x=>x.value),q=$('#search').value.toLocaleLowerCase().trim(),u=$('#uncertainty').value;return DATA.filter(r=>(ignoreCollection||!cs.length||cs.includes(r.collection))&&(!ms.length||r.groups.some(g=>ms.includes(g)))&&(!$('#translated').checked||r.translation)&&(!q||`${r.id} ${r.title} ${r.text} ${r.translation}`.toLocaleLowerCase().includes(q))&&(!u||(u==='none'?!r.events.some(e=>['yes','unclear'].includes(e.uncertainty)):r.events.some(e=>e.uncertainty===u)))&&(defaultSensorySelection()||matchingEvents(r).length>0))}
+function applyFilters(ignoreCollection=false){const cs=[...document.querySelectorAll('[name=collection]:checked')].map(x=>x.value),ms=[...document.querySelectorAll('[name=mode]:checked')].map(x=>x.value),q=$('#search').value.toLocaleLowerCase().trim(),u=$('#uncertainty').value;return DATA.filter(r=>(ignoreCollection||!cs.length||cs.includes(r.collection))&&(!ms.length||r.groups.some(g=>ms.includes(g)))&&(!$('#translated').checked||canReadRecord(r))&&(!q||`${r.id} ${r.title} ${canReadRecord(r)?r.text+' '+r.translation:''}`.toLocaleLowerCase().includes(q))&&(!u||(u==='none'?!r.events.some(e=>['yes','unclear'].includes(e.uncertainty)):r.events.some(e=>e.uncertainty===u)))&&(defaultSensorySelection()||matchingEvents(r).length>0))}
 function update(){const candidates=applyFilters();filtered=mapScope==='unmapped'?candidates.filter(r=>!r.locations.length):mapScope instanceof Set?candidates.filter(r=>mapScope.has(r.key)):candidates;if(!filtered.some(r=>r.key===selected))selected=filtered[0]?.key;renderReader();if(mapReady)renderMap(candidates);renderConfigurations();renderActiveFilters()}
 function annotationSpans(e){return e.spans||[{start:e.start,end:e.end,span:e.span}]}
+function allAnnotations(r){return [...r.events,...(r.candidates||[]),...(r.responses||[]),...(r.observations||[])]}
+function visibleAnnotation(e){return e.type==='conservative'||e.type==='response'&&showResponses||e.type==='candidate'&&showCandidates||e.type==='observation'&&showObservations}
 function eventInfo(parent,events){
  parent.replaceChildren();parent.hidden=false;
  for(const e of events){
-  const item=el('div'),response=e.type==='response',candidate=e.type==='candidate';
-  item.append(el('p','eyebrow',`${response?'Response':candidate?'Unresolved candidate':'Sensory event'} · ${e.id}`));
+  const item=el('div'),response=e.type==='response',candidate=e.type==='candidate',observation=e.type==='observation';
+  item.append(el('p','eyebrow',`${response?'Response':candidate?'Unresolved candidate':observation?'Context / non-detection':'Sensory event'} · ${e.id}`));
+  if(observation)item.append(el('strong','',e.label));
   if(response)item.append(el('strong','',e.label));
   for(const s of annotationSpans(e))item.append(el('blockquote','',s.span));
   if(response){
-   item.append(el('p','',`Roles: ${e.roles.join(', ')}`),el('p','',e.event_ids.length?`Event link: ${e.link_status} · ${e.event_ids.join(', ')}`:'Unassigned response candidate · no confirmed sensory-event link'),el('p','',e.explanation));
+   item.append(el('p','',`Roles: ${e.roles.join(', ')}`),el('p','',e.event_ids.length?`Event link: ${e.link_status} · ${e.event_ids.join(', ')}`:'Not linked to a specific sensory event'),el('p','',e.explanation));
+   if(e.context?.experiencer)item.append(el('p','',`Experiencer: ${e.context.experiencer}`));
    if(e.notes)item.append(el('p','',e.notes));
   }else{
-   const chips=el('div','chips');e.modalities.forEach(m=>chips.append(chip(m,e.groups[0])));item.append(chips);
+   const chips=el('div','chips');e.modalities.forEach((m,i)=>chips.append(chip(m,e.groups[i]||e.groups[0])));item.append(chips);
    item.append(el('p','',`Perceptual status: ${e.polarity}`),el('p','',`Narrated uncertainty: ${e.uncertainty==='no'?'not stated':e.uncertaintyType}`));
-   if(candidate)item.append(el('p','hint','Excluded from map points, graphs and sensory-event counts.'));
+   if(candidate||observation)item.append(el('p','hint','Excluded from map points, graphs and sensory-event counts.'));
    if(e.evidence)item.append(el('p','',`Uncertainty evidence: ${e.evidence}`));
    if(e.note)item.append(el('p','',e.note));
    if(Object.keys(e.context||{}).length){const dl=el('dl');for(const [k,v] of Object.entries(e.context))dl.append(el('dt','',k.replaceAll('_',' ')),el('dd','',v));item.append(dl)}
   }
+  if(e.relatedEventIds?.length&&!response)item.append(el('p','hint',`Related event: ${e.relatedEventIds.join(', ')}`));
   if(e.gloss)item.append(el('p','hint',`Working gloss: ${e.gloss}`));
   const ids=e.evidenceIds||[...(e.evidence_ids||[]),...(e.link_evidence_ids||[])],proofs=ids.map(id=>evidenceById.get(id)).filter(Boolean);
   if(proofs.length){const d=el('details');d.append(el('summary','', 'Supporting evidence'));for(const proof of proofs)d.append(el('p','hint',`${proof.field.replaceAll('_',' ')} · ${proof.start_codepoint}–${proof.end_codepoint_exclusive}`),el('blockquote','',proof.quote));item.append(d)}
@@ -88,53 +97,71 @@ function eventInfo(parent,events){
  }
 }
 function annotationLayers(r,parent){
- const nr=(r.responses||[]).length,nc=(r.candidates||[]).length;if(!nr&&!nc)return;
- const d=el('details','annotation-layers');d.open=showResponses||showCandidates;
- d.append(el('summary','',`Additional annotations · ${nr} responses · ${nc} candidates`),el('p','hint','Optional original-text layers, excluded from sensory-event counts. Dashed passages are unresolved candidates; underlined passages are responses. Response links may be supported, ambiguous or unassigned.'));
- for(const [id,label,count,checked,set] of [['show-responses','Show response passages',nr,showResponses,v=>showResponses=v],['show-candidates','Show candidate passages',nc,showCandidates,v=>showCandidates=v]]){
-  const l=el('label','check'),input=el('input');input.type='checkbox';input.id=id;input.checked=checked;input.disabled=!count;input.onchange=()=>{set(input.checked);renderReader()};l.append(input,document.createTextNode(`${label} (${count})`));d.append(l);
+ const nr=(r.responses||[]).length,nc=(r.candidates||[]).length,no=(r.observations||[]).length;if(!nr&&!nc&&!no)return;
+ const d=el('details','annotation-layers');d.open=showResponses||showCandidates||showObservations;
+ d.append(el('summary','',`Additional annotations · ${nr+nc+no}`),el('p','hint',`Optional layers${r.reviewAnnotations?' in both languages':''}, excluded from sensory-event counts. Dashed underlines mark candidates, solid underlines responses, and dotted underlines context or non-detection.`));
+ for(const [id,label,count,checked,set] of [['show-responses','Responses',nr,showResponses,v=>showResponses=v],['show-candidates','Possible sensory experiences',nc,showCandidates,v=>showCandidates=v],['show-observations','Context and non-detection',no,showObservations,v=>showObservations=v]]){
+  const l=el('label','check'),input=el('input');input.type='checkbox';input.id=id;input.checked=checked;input.disabled=!count&&!checked;input.onchange=()=>{set(input.checked);renderReader()};l.append(input,document.createTextNode(`${label} (${count})`));d.append(l);
  }parent.append(d);
 }
 function original(r,parent,isTranslation=false){
+ if(!canReadRecord(r))return;
  const text=el('div','narrative');text.lang=isTranslation?'en':langs[r.collection];
- const content=isTranslation?r.translation:r.text,eventList=isTranslation?(r.translationEvents||[]):[...r.events,...(showCandidates?r.candidates||[]:[]),...(showResponses?r.responses||[]:[])];
+ const content=isTranslation?r.translation:r.text,eventList=(isTranslation?(r.translationEvents||[]):allAnnotations(r)).filter(visibleAnnotation);
  const info=el('div','annotation');info.hidden=true;const points=Array.from(content);
  const ranges=eventList.flatMap(e=>annotationSpans(e).map(s=>({...s,event:e})));
  const boundaries=[...new Set([0,points.length,...ranges.flatMap(s=>[s.start,s.end])])].sort((a,b)=>a-b);
  for(let i=0;i<boundaries.length-1;i++){
   const a=boundaries[i],b=boundaries[i+1],segment=points.slice(a,b).join('');
-  const events=[...new Map(ranges.filter(s=>s.start<=a&&s.end>=b).map(s=>[s.event.id,s.event])).values()];
+  const covering=ranges.filter(s=>s.start<=a&&s.end>=b),events=[...new Map(covering.map(s=>[s.event.id,s.event])).values()];
   if(!events.length||!highlight){text.append(document.createTextNode(segment));continue}
-  const sensory=events.filter(e=>e.type==='conservative'),modes=[...new Set(sensory.flatMap(e=>e.groups))],mark=el('mark',modes.length>1?'multi':'',segment);
+  const sensory=covering.filter(s=>s.event.type==='conservative'),modes=[...new Set(sensory.flatMap(s=>s.groups||s.event.groups))],mark=el('mark',modes.length>1?'multi':'',segment);
   if(modes.length){mark.dataset.modes=modes.join(' ');tone(mark,modes[0]);if(modes[1])mark.style.setProperty('--tone2',`var(--${modes[1]})`)}else mark.classList.add('auxiliary-mark');
   if(events.some(e=>e.type==='candidate'))mark.classList.add('candidate-mark');
   if(events.some(e=>e.type==='response'))mark.classList.add('response-mark');
+  if(events.some(e=>e.type==='observation'))mark.classList.add('observation-mark');
   if(selectedEvent?.r.key===r.key&&events.some(e=>e.id===selectedEvent.e.id))mark.classList.add('chosen');
   mark.dataset.record=r.key;mark.dataset.eventIds=events.map(e=>e.id).join(' ');mark.tabIndex=0;mark.setAttribute('role','button');
-  const labels=[...modes.map(g=>modeNames[g]),...(events.some(e=>e.type==='response')?['Response']:[]),...(events.some(e=>e.type==='candidate')?['Candidate']:[])];
+  const labels=[...modes.map(g=>modeNames[g]),...(events.some(e=>e.type==='response')?['Response']:[]),...(events.some(e=>e.type==='candidate')?['Candidate']:[]),...(events.some(e=>e.type==='observation')?['Context / non-detection']:[])];
   mark.setAttribute('aria-label',`${labels.join(', ')}: ${segment}. Inspect annotation`);
   function select(){
    const ids=events.map(e=>e.id),main=r.events.find(e=>ids.includes(e.id));selectedEvent=main?{r,e:main}:null;
    document.querySelectorAll('mark[data-event-ids]').forEach(m=>{if(m.dataset.record===r.key)m.classList.toggle('chosen',m.dataset.eventIds.split(' ').some(id=>ids.includes(id)))});
-   eventInfo(info,events.map(e=>isTranslation?r.events.find(source=>source.id===e.id):e));info.scrollIntoView({behavior:'smooth',block:'nearest'});
+   eventInfo(info,events.map(e=>isTranslation?allAnnotations(r).find(source=>source.id===e.id):e).filter(Boolean));info.scrollIntoView({behavior:'smooth',block:'nearest'});
   }mark.onclick=select;mark.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select()}};text.append(mark);
  }parent.append(text,info);
 }
 function translation(r,parent){
  if(!r.translation)return;
- const section=el('section','translation-block');section.setAttribute('aria-label','English translation');section.append(el('h3','language-heading','English translation'),el('p','hint translation-status',`Working translation · Not reviewed by a human. ${r.translationAlignedEvents===r.events.length?'Sensory highlights are provisionally aligned with the original annotations.':'Some sensory highlights are not yet aligned with the original annotations.'}`));
+ const status=r.reviewAnnotations?`Working translation · ${r.reviewAnnotations.basis==='data.docx'?'Coding revised from the supplied review.':'Coding revised from the earlier discussion; this example was absent from the review document.'} Original-language alignment remains provisional.`:`Working translation · Not reviewed by a human. ${r.translationAlignedEvents===r.events.length?'Sensory highlights are provisionally aligned with the original annotations.':'Some sensory highlights are not yet aligned with the original annotations.'}`;
+ const section=el('section','translation-block');section.setAttribute('aria-label','English translation');section.append(el('h3','language-heading','English translation'),el('p','hint translation-status',status));
  original(r,section,true);
  if(r.translationNotes.length){const d=el('details');d.append(el('summary','', 'Translator notes'));r.translationNotes.forEach(n=>d.append(el('p','',n)));section.append(d)}parent.append(section);
 }
 
 function contexts(r,parent){const section=el('div','context');section.append(el('h3','', 'Narrative context'));const dl=el('dl');for(const [k,label] of [['place','Place'],['time','Time'],['movement','Movement']]){dl.append(el('dt','',label),el('dd','',r.context[k]||'Not coded'))}section.append(dl,el('p','hint','Contexts recorded for sensory events. Event details show their supporting evidence.'));parent.append(section)}
-function source(r,parent){parent.append(el('h3','', 'Source reference'),el('p','',r.source||'No source reference supplied for this record.'),el('p','',`Record: ${r.id} · ${collections[r.collection]}`),el('p','',`Source category: ${r.category||'Not supplied'}`));for(const loc of r.locations||[])parent.append(el('p','',`Map: ${loc.label} · ${loc.precision}. ${loc.provenance}`));if(r.place)parent.append(el('p','',`Collection place: ${r.place}`));if(r.annotationNote)parent.append(el('p','',`Annotation note: ${r.annotationNote}`));parent.append(el('p','hint','Source categories and collection places are metadata, not inferred narrative identities or event locations.'))}
-function renderReader(){renderMetadata();const parent=$('#reader');parent.replaceChildren();const r=DATA.find(x=>x.key===selected);renderExampleNavigation(r);$('#source-text-selection').textContent=r?`${collections[r.collection]} · ${r.id}`:'No matching narrative';if(!r){parent.append(el('p','empty','Select different filters to browse the collection.'));return}const top=el('div','reader-top');top.append(el('p','eyebrow',`${collections[r.collection].toUpperCase()} COLLECTION · ${r.id}`));parent.append(top,el('h1','',r.title),el('div','reader-meta',`${r.events.length} sensory events · ${r.translation?'English translation available':'Original language'}`));const chips=el('div','chips');r.groups.forEach(g=>chips.append(chip(modeNames[g],g)));parent.append(chips);const tabs=el('div','tabs');for(const [id,label] of [['original','Text'],['source','Source information']]){const b=button(label,()=>{tab=id;renderReader()});b.className=tab===id?'active':'';b.setAttribute('aria-pressed',String(tab===id));tabs.append(b)}parent.append(tabs);if(tab==='original'){const row=el('div','toggle-row');row.append(el('span','hint','Select a highlighted passage to inspect its annotation.'));const label=el('label'),input=el('input');input.type='checkbox';input.checked=highlight;input.onchange=()=>{highlight=input.checked;renderReader()};label.append(input,document.createTextNode('Highlight'));row.append(label);parent.append(row);annotationLayers(r,parent);legend(parent);parent.append(el('h3','language-heading','Original'));original(r,parent);translation(r,parent);contexts(r,parent)}else if(tab==='english')translation(r,parent);else source(r,parent)}
-$('#search').oninput=()=>{mapScope=null;update()};$('#uncertainty').onchange=$('#translated').onchange=()=>{mapScope=null;update()};$('#reset').onclick=clearAllFilters;$('#browse').onclick=()=>{$('#corpus-map').scrollIntoView({behavior:'smooth',block:'center'});if(mapReady)map.invalidateSize()};$('#about').onclick=()=>$('#about-dialog').showModal();$('#close-about').onclick=()=>$('#about-dialog').close();initExampleBrowser();initConfigurations();initMap();update();
+function reviewDecisions(r,parent){
+ if(!r.reviewAnnotations)return;
+ const review=r.reviewAnnotations,d=el('details','annotation-review');d.append(el('summary','','Annotation review'),el('p','hint',`Basis: ${review.basis}. ${review.original_alignment}.`));
+ if(review.notes)d.append(el('p','',review.notes));
+ if(review.decisions.length){const table=el('table'),head=el('thead'),tr=el('tr');tr.append(el('th','','Review fragment'),el('th','','Classification and reasoning'));head.append(tr);table.append(head);const body=el('tbody');for(const row of review.decisions){if(row[0].trim()==='Fragment')continue;const line=el('tr');line.append(el('td','',row[0]),el('td','',row[1]||'No additional classification supplied.'));body.append(line)}table.append(body);d.append(table)}parent.append(d);
+}
+function source(r,parent){parent.append(el('h3','', 'Source reference'),el('p','',r.source||'No source reference supplied for this record.'),el('p','',`Record: ${r.id} · ${collections[r.collection]}`),el('p','',`Source category: ${r.category||'Not supplied'}`));for(const loc of r.locations||[])parent.append(el('p','',`Map: ${loc.label} · ${loc.precision}. ${loc.provenance}`));if(r.place)parent.append(el('p','',`Collection place: ${r.place}`));if(canReadRecord(r)&&r.annotationNote)parent.append(el('p','',`Annotation note: ${r.annotationNote}`));parent.append(el('p','hint','Source categories and collection places are metadata, not inferred narrative identities or event locations.'))}
+function renderReader(){renderMetadata();const parent=$('#reader');parent.replaceChildren();const selectedRecord=DATA.find(x=>x.key===selected);if(canReadRecord(selectedRecord))readingSelected=selected;const r=translatedExamples.find(x=>x.key===readingSelected);renderExampleNavigation(r);$('#source-text-selection').textContent=canReadRecord(r)?`${collections[r.collection]} · ${r.id}`:'Choose one of the 24 examples';if(!canReadRecord(r)){parent.append(el('p','empty','Reading is limited to the 24 selected examples. Choose an example above; other narratives contribute to the maps and graphs only.'));return}const top=el('div','reader-top');top.append(el('p','eyebrow',`${collections[r.collection].toUpperCase()} COLLECTION · ${r.id}`));parent.append(top,el('h1','',r.title),el('div','reader-meta',`${r.events.length} sensory event${r.events.length===1?'':'s'} · ${r.translation?'English translation available':'Original language'}`));const chips=el('div','chips');r.groups.forEach(g=>chips.append(chip(modeNames[g],g)));parent.append(chips);if(!r.events.length&&r.observations?.length)parent.append(el('p','hint','This example records spatial experience and context. Open Additional annotations to inspect these passages.'));const tabs=el('div','tabs');for(const [id,label] of [['original','Text'],['source','Source information']]){const b=button(label,()=>{tab=id;renderReader()});b.className=tab===id?'active':'';b.setAttribute('aria-pressed',String(tab===id));tabs.append(b)}parent.append(tabs);if(tab==='original'){const row=el('div','toggle-row');row.append(el('span','hint','Select a highlighted passage to inspect its annotation.'));const label=el('label'),input=el('input');input.type='checkbox';input.checked=highlight;input.onchange=()=>{highlight=input.checked;renderReader()};label.append(input,document.createTextNode('Highlight'));row.append(label);parent.append(row);annotationLayers(r,parent);legend(parent);parent.append(el('h3','language-heading','Original'));original(r,parent);translation(r,parent);contexts(r,parent)}else if(tab==='english')translation(r,parent);else{source(r,parent);reviewDecisions(r,parent)}}
+$('#search').oninput=()=>{mapScope=null;update()};$('#uncertainty').onchange=$('#translated').onchange=()=>{mapScope=null;update()};$('#reset').onclick=clearAllFilters;$('#browse').onclick=()=>{$('#corpus-map').scrollIntoView({behavior:'smooth',block:'center'});if(mapReady)map.invalidateSize()};$('#read-examples').onclick=()=>{const target=$('#translated-example');target.focus({preventScroll:true});$('#source-text').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})};$('#about').onclick=()=>$('#about-dialog').showModal();$('#close-about').onclick=()=>$('#about-dialog').close();initExampleBrowser();initConfigurations();initMap();update();
 
-$("#corpus-summary").textContent = `${DATA.length} narratives · ${new Set(DATA.map(r=>r.collection)).size} collections · ${DATA.filter(r=>r.translation).length} English translations`;
+$("#corpus-summary").textContent = `${DATA.length} narratives · ${new Set(DATA.map(r=>r.collection)).size} collections · ${translatedExamples.length} reading examples`;
 function initMap(){
- if(!window.L){$('#map-status').textContent='Map library unavailable. All texts remain available below.';return}
+ if(!window.L){$('#map-status').textContent='Map library unavailable. The 24 reading examples remain available below.';return}
+ // Animate each dot to its bounded spread at the destination zoom, rather than
+ // enlarging its geographic offset and snapping it back when zooming finishes.
+ EventMapMarker=L.Marker.extend({
+  _animateZoom(ev){
+   const {loc,radius,angle}=this.options.eventLayout;
+   const position=eventMapPosition(loc,radius,angle,ev.zoom);
+   this._setPos(this._map._latLngToNewLayerPoint(position,ev.zoom,ev.center).round());
+  }
+ });
  map=L.map('corpus-map',{scrollWheelZoom:true,minZoom:3,maxZoom:14,zoomSnap:.25,zoomControl:true}).setView([62,19],innerWidth>1150?4.25:3.5);
  countryLayer=L.geoJSON(window.VERSE_COUNTRIES,{style:{color:'#263343',weight:.65,fillColor:'#142030',fillOpacity:1},interactive:false,smoothFactor:.5}).addTo(map);
  map.attributionControl.addAttribution('Overview: <a href="https://www.naturalearthdata.com/">Natural Earth</a>');
@@ -227,21 +254,28 @@ function chooseEvent(r,e,openText=false){
  selected=r.key;selectedEvent={r,e};tab='original';highlight=true;
  if(!filtered.some(x=>x.key===r.key)){mapScope=null;update()}
  renderConfigurations();renderReader();if(mapReady)renderMap(applyFilters());renderActiveFilters();
- const info=$('#reader .annotation');if(info)eventInfo(info,[e]);
- if(openText)showInspection('reader');
+ const info=$('#reader .annotation');if(canReadRecord(r)&&info)eventInfo(info,[e]);
+ if(openText&&canReadRecord(r))showInspection('reader');
 }
 
 function eventMapGroups(records){const groups=new Map();for(const entry of eventEntries(records)){const loc=entry.r.locations[0];if(!loc)continue;const key=`${loc.lat},${loc.lon}`;if(!groups.has(key))groups.set(key,{loc,entries:[]});groups.get(key).entries.push(entry)}return [...groups.values()]}
-// Fix the visual spread in projected coordinates at the overview zoom. Rebuilding
-// screen-pixel offsets after zooming makes dots snap back and move away from the cursor.
+// Keep the overview spacing, then add a little room as users zoom in. The
+// screen radius grows smoothly towards 145%, instead of doubling at every zoom.
+function eventSpreadScale(zoom){
+ const steps=zoom-4.25;
+ return steps<=0?2**steps:1+.45*(1-Math.exp(-steps/2));
+}
+function eventMapPosition(loc,radius,angle,zoom){
+ const origin=map.project([loc.lat,loc.lon],zoom),offset=radius*eventSpreadScale(zoom);
+ return map.unproject(L.point(origin.x+Math.cos(angle)*offset,origin.y+Math.sin(angle)*offset),zoom);
+}
 function eventMapLayout(records){
- const referenceZoom=4.25,spread=Number($('#event-spread').value),golden=Math.PI*(3-Math.sqrt(5));
+ const zoom=map.getZoom(),spread=Number($('#event-spread').value),golden=Math.PI*(3-Math.sqrt(5));
  return eventMapGroups(records).map(({loc,entries})=>{
-  const origin=map.project([loc.lat,loc.lon],referenceZoom);
   entries.sort((a,b)=>(a.r.key+a.e.id).localeCompare(b.r.key+b.e.id));
   return {loc,entries:entries.map((entry,i)=>{
    const radius=entries.length===1?12:12+spread*2.8*Math.sqrt(i+1),angle=i*golden;
-   return {...entry,position:map.unproject(L.point(origin.x+Math.cos(angle)*radius,origin.y+Math.sin(angle)*radius),referenceZoom)};
+   return {...entry,eventLayout:{loc,radius,angle},position:eventMapPosition(loc,radius,angle,zoom)};
   })};
  });
 }
@@ -251,9 +285,9 @@ function renderEventMap(records,background=false){
  if(!background)$('#map-explanation').textContent='One dot = one sensory event. Fine spokes lead to its source-place anchor; spread is visual, not geographic. Multicoloured dots have multiple modes. Select a dot to highlight an event; select a place ring to explore its events. Source texts can be opened separately below. Click an empty area of the map to clear the selection.';
  const dotSize=Math.min(15,8+Math.max(0,map.getZoom()-4.25)*1.2),hitSize=Math.max(20,dotSize+10);
  for(const {loc,entries} of groups){
-  entries.forEach(({r,e,position})=>{const colour=eventColour(e);
-   L.polyline([[loc.lat,loc.lon],position],{color:colour,weight:.65,opacity:background?.04:.2,interactive:false}).addTo(markers);
-   const dot=L.marker(position,{icon:L.divIcon({className:'event-map-dot'+(background?' map-context-dot':''),html:eventMarkerSymbol(e,dotSize),iconSize:[hitSize,hitSize],iconAnchor:[hitSize/2,hitSize/2]}),keyboard:!background,interactive:!background,opacity:background?.24:1,title:`${e.id} · ${e.modalities.join(', ')}`}).addTo(markers);
+  entries.forEach(({r,e,position,eventLayout})=>{const colour=eventColour(e);
+   L.polyline([[loc.lat,loc.lon],position],{className:'event-spoke',color:colour,weight:.65,opacity:background?.04:.2,interactive:false}).addTo(markers);
+   const dot=new EventMapMarker(position,{eventLayout,icon:L.divIcon({className:'event-map-dot'+(background?' map-context-dot':''),html:eventMarkerSymbol(e,dotSize),iconSize:[hitSize,hitSize],iconAnchor:[hitSize/2,hitSize/2]}),keyboard:!background,interactive:!background,opacity:background?.24:1,title:`${e.id} · ${e.modalities.join(', ')}`}).addTo(markers);
    if(background){dot.getElement().removeAttribute('title');dot.getElement().setAttribute('aria-hidden','true');return}
    const isSelected=selectedEvent?.r.key===r.key&&selectedEvent?.e.id===e.id;
    dot.getElement().classList.toggle('is-selected',isSelected);dot.getElement().setAttribute('aria-pressed',String(isSelected));
@@ -355,7 +389,8 @@ function drawHeatContours(ctx,field,width,height,dark,intensity,colour){
 
 function showInspection(view){
  if(view==='reader'){
-  $('#source-text').open=true;
+  if(!canReadRecord(DATA.find(r=>r.key===selected)))return;
+  // The examples are always visible below the map.
   requestAnimationFrame(()=>{const target=$('#reader mark.chosen')||$('#reader');target.focus({preventScroll:true});target.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:target.matches('mark')?'center':'start'})});
   return;
  }
@@ -366,9 +401,9 @@ function renderMetadata(){
  const panel=$('#metadata-panel');if(!panel)return;panel.replaceChildren();
  const r=DATA.find(x=>x.key===selected);if(!r){panel.append(el('p','empty','Choose a narrative to see its metadata.'));return}
  panel.append(el('p','eyebrow',`${collections[r.collection]} · ${r.id}`),el('h2','',r.title));
- const stats=el('div','metadata-stats');stats.append(el('span','',`${r.events.length} sensory events`),el('span','',r.translation?'English available':'Original only'));panel.append(stats);
- const chips=el('div','chips');r.groups.forEach(g=>chips.append(chip(modeNames[g],g)));panel.append(chips);contexts(r,panel);source(r,panel);
- panel.append(button('View source text',()=>showInspection('reader')));
+ const stats=el('div','metadata-stats');stats.append(el('span','',`${r.events.length} sensory events`),el('span','',canReadRecord(r)?'Reading example · original + English':'Patterns only · text not displayed'));panel.append(stats);
+ const chips=el('div','chips');r.groups.forEach(g=>chips.append(chip(modeNames[g],g)));panel.append(chips);if(canReadRecord(r))contexts(r,panel);source(r,panel);
+ if(canReadRecord(r))panel.append(button('View source text',()=>showInspection('reader')));
 }
 
 function initConfigurations(){
@@ -384,9 +419,9 @@ function renderConfigurations(){
  $('#sensory-filter-summary').textContent=`${configModes.size===7?'All 7':configModes.size} modes · ${{any:'At least one',contains:'Contains all',exact:'Exactly'}[$('#config-match').value]}`;
  const entries=eventEntries(filtered);if(selectedEvent&&!entries.some(x=>x.r.key===selectedEvent.r.key&&x.e.id===selectedEvent.e.id))selectedEvent=null;const groupBy=$('#config-group').value,groups=new Map();
  for(const x of entries){const key=groupBy==='collection'?collections[x.r.collection]:groupBy==='uncertainty'?({yes:'Uncertainty coded',no:'Not explicitly coded',unclear:'Coding unclear'}[x.e.uncertainty]||x.e.uncertainty):x.e.groups.map(g=>modeNames[g]).sort().join(' + ');if(!groups.has(key))groups.set(key,[]);groups.get(key).push(x)}
- $('#config-count').textContent=`${entries.length} events · ${new Set(entries.map(x=>x.r.key)).size} narratives · ${groups.size} groups`;
+ $('#config-count').textContent=`${entries.length} events · ${new Set(entries.map(x=>x.r.key)).size} of ${filtered.length} narratives · ${groups.size} groups`;
  $('#config-modes').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(configModes.has(b.dataset.mode))));
- const container=$('#config-canvas');container.replaceChildren();document.querySelectorAll('[data-research-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.researchView===researchView)));container.hidden=researchView!=='clusters';$('#research-view').hidden=researchView==='clusters';$('.config-controls').hidden=false;$('#config-modes').hidden=false;$('.config-caption').hidden=researchView!=='clusters';if(researchView!=='clusters'){$('#config-count').textContent=`${entries.length} events · ${new Set(entries.map(x=>x.r.key)).size} narratives`;renderResearchView(entries);return}
+ const container=$('#config-canvas');container.replaceChildren();document.querySelectorAll('[data-research-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.researchView===researchView)));container.hidden=researchView!=='clusters';$('#research-view').hidden=researchView==='clusters';$('.config-controls').hidden=false;$('#config-modes').hidden=false;$('.config-caption').hidden=researchView!=='clusters';if(researchView!=='clusters'){$('#config-count').textContent=`${entries.length} events · ${new Set(entries.map(x=>x.r.key)).size} of ${filtered.length} narratives`;renderResearchView(entries);return}
  if(!entries.length){$('#config-event').replaceChildren();container.append(el('p','empty','No events match this combination. Clear the combination or adjust the filters.'));return}
  const width=600,cols=2,cell=300,rows=Math.ceil(groups.size/cols),height=rows*280;const svg=svgElement('svg',{viewBox:`0 0 ${width} ${height}`,role:'group','aria-label':`${entries.length} events grouped by ${groupBy}`,class:'configuration-svg'});
  const defs=svgElement('defs',{});svg.append(defs);const fills=new Map();for(const {e} of entries){const key=[...e.groups].sort().join('-');if(fills.has(key))continue;if(e.groups.length<2){fills.set(key,eventColour(e));continue}const id='mode-gradient-'+key,gradient=svgElement('linearGradient',{id,x1:'0%',x2:'100%',y1:'0%',y2:'100%'});e.groups.forEach((g,i)=>{gradient.append(svgElement('stop',{offset:`${i*100/e.groups.length}%`,'stop-color':sensoryColours[g]}),svgElement('stop',{offset:`${(i+1)*100/e.groups.length}%`,'stop-color':sensoryColours[g]}))});defs.append(gradient);fills.set(key,`url(#${id})`)}
@@ -399,7 +434,7 @@ function renderConfigurations(){
   });svg.append(svgElement('circle',{cx,cy,r:16,fill:'var(--constellation-centre)',stroke:themeToken('ui-border'),'stroke-width':1.2}),count);
  }
  container.append(svg);
- const detail=$('#config-event');detail.replaceChildren();if(selectedEvent){const {r,e}=selectedEvent;detail.append(el('p','eyebrow',`${collections[r.collection]} · ${e.id}`),el('p','',e.modalities.join(' + ')),el('p','hint',`Uncertainty: ${e.uncertainty} · ${e.kind}`),button('View source text',()=>chooseEvent(r,e,true)));}else detail.append(el('p','hint','Choose an event on the map or in a constellation.'));
+ const detail=$('#config-event');detail.replaceChildren();if(selectedEvent){const {r,e}=selectedEvent;detail.append(el('p','eyebrow',`${collections[r.collection]} · ${e.id}`),el('p','',e.modalities.join(' + ')),el('p','hint',`Uncertainty: ${e.uncertainty} · ${e.kind}`));if(canReadRecord(r))detail.append(button('View source text',()=>chooseEvent(r,e,true)));}else detail.append(el('p','hint','Choose an event on the map or in a constellation.'));
 }
 
 function clearAllFilters(){document.querySelectorAll('.filters input[type=checkbox]').forEach(x=>x.checked=false);$('#search').value='';$('#uncertainty').value='';resetSensorySelection();$('#config-group').value='modes';flowSelected=null;densitySelected=null;selectedEvent=null;mapScope=null;update()}
@@ -434,14 +469,14 @@ function renderSensoryComparison(root,entries){
   for(const [g,n] of counts){if(!n)continue;const percent=100*n/total,b=button('',()=>{document.querySelectorAll('[name=collection]').forEach(i=>i.checked=i.value===code);configModes=new Set([g]);$('#config-match').value='contains';mapScope=null;researchView='clusters';update()});b.style.width=percent+'%';b.style.backgroundColor=sensoryColours[g];b.style.setProperty('--segment-label',chartLabelColour(sensoryColours[g]));b.dataset.mode=g;b.title=`${name} · ${modeNames[g]}: ${n} sensory-category links (${percent.toFixed(1)}%)`;b.setAttribute('aria-label',b.title+'. Explore these events');if(percent>=12)b.textContent=Math.round(percent)+'%';bar.append(b)}
   row.append(bar);root.append(row);const tr=el('tr');tr.append(el('th','',name),el('td','',es.length));counts.forEach(([,n])=>tr.append(el('td','',n)));tbody.append(tr);
  }
- table.append(tbody);const axis=el('div','composition-axis');['0%','25%','50%','75%','100%'].forEach(t=>axis.append(el('span','',t)));root.append(axis,el('p','research-note','Only sensory events are counted; unresolved candidates and responses are excluded. Counts describe this pilot selection, not prevalence in a country. Select a segment to inspect its events.'));
+ table.append(tbody);const axis=el('div','composition-axis');['0%','25%','50%','75%','100%'].forEach(t=>axis.append(el('span','',t)));root.append(axis,el('p','research-note','Only sensory events are counted; candidates, responses and contextual annotations are excluded. Counts describe this pilot selection, not prevalence in a country. Select a segment to inspect its events.'));
  const details=el('details','chart-data');details.append(el('summary','', 'View exact counts'));const wrap=el('div','table-scroll');wrap.append(table);details.append(wrap);root.append(details);
 }
 function renderEventFlow(root,entries){
  const byRecord=new Map();for(const x of entries){if(!byRecord.has(x.r.key))byRecord.set(x.r.key,[]);byRecord.get(x.r.key).push(x)}
  const records=[...byRecord.values()].sort((a,b)=>a[0].r.key.localeCompare(b[0].r.key));
  if(flowSelected&&!byRecord.has(flowSelected))flowSelected=null;
- root.append(el('h2','research-heading','Sensory progression'),el('p','research-note','One strand follows one narrative. Its colour changes between sensory modes. Hover over a point to preview its strand. Select it to keep the strand highlighted. Source text is available separately when needed.'));
+ root.append(el('h2','research-heading','Sensory progression'),el('p','research-note','One strand follows one narrative. Its colour changes between sensory modes. Hover over a point to preview its strand. Select it to keep the strand highlighted. Reading is available for the 24 selected examples.'));
  const toolbar=el('div','flow-toolbar'),status=el('div','flow-selection-status'),clear=button('Clear strand selection',()=>{
   flowSelected=null;selectedEvent=null;hoveredKey=null;focus(null);
   renderReader();if(mapReady)renderMap(applyFilters());renderActiveFilters();
@@ -452,7 +487,7 @@ function renderEventFlow(root,entries){
  const lanes=[...Object.keys(modeNames),'multi'],svg=svgElement('svg',{viewBox:`0 0 ${chartWidth} 470`,class:'flow-svg flow-all',role:'group','aria-label':`${entries.length} sensory events across all ${records.length} matching narratives`}),defs=svgElement('defs',{}),x0=150,x1=chartWidth-15,y0=35,step=48;svg.append(defs);
  for(let i=0;i<lanes.length;i++){const y=y0+i*step,label=svgElement('text',{x:137,y:y+4,'text-anchor':'end',class:'flow-lane-label'});label.textContent=lanes[i]==='multi'?'Multiple modes':modeNames[lanes[i]];svg.append(svgElement('line',{x1:x0,x2:x1,y1:y,y2:y,stroke:'currentColor',opacity:.13,'pointer-events':'none'}),label)}
  const groups=[],hitTargets=[],detail=el('div','flow-detail');detail.setAttribute('aria-live','polite');
- function showDetail(r,e){detail.replaceChildren();detail.append(el('p','eyebrow',`${collections[r.collection]} · ${r.id}`),el('strong','',r.title),el('p','research-note',`${byRecord.get(r.key).length} matching events · selected: ${e.modalities.join(' + ')}`),button('View source text',()=>chooseEvent(r,e,true)))}
+ function showDetail(r,e){detail.replaceChildren();detail.append(el('p','eyebrow',`${collections[r.collection]} · ${r.id}`),el('strong','',r.title),el('p','research-note',`${byRecord.get(r.key).length} matching events · selected: ${e.modalities.join(' + ')}`));if(canReadRecord(r))detail.append(button('View source text',()=>chooseEvent(r,e,true)))}
  function focus(key){
   clear.hidden=!flowSelected;
   const current=byRecord.get(key)?.[0].r;
@@ -461,7 +496,7 @@ function renderEventFlow(root,entries){
  }
  let gi=0;for(const list of records){const r=list[0].r,es=[...list].sort((a,b)=>a.e.start-b.e.start||a.e.end-b.e.end),group=svgElement('g',{'data-narrative':r.key,class:'flow-strand'});groups.push(group);
   let hash=0;for(const c of r.key)hash=(hash*31+c.charCodeAt(0))>>>0;const jitter=(hash%1001)/1000*22-11;
-  const len=Math.max(1,Array.from(r.text).length),points=es.map(({e})=>({e,x:x0+(x1-x0)*e.start/len,y:y0+step*lanes.indexOf(e.groups.length>1?'multi':e.groups[0])+jitter}));
+  const len=Math.max(1,narrativeLength(r)),points=es.map(({e})=>({e,x:x0+(x1-x0)*e.start/len,y:y0+step*lanes.indexOf(e.groups.length>1?'multi':e.groups[0])+jitter}));
   const id='strand-gradient-'+gi++,first=points[0],last=points[points.length-1],gradient=svgElement('linearGradient',{id,gradientUnits:'userSpaceOnUse',x1:first.x,y1:0,x2:last.x===first.x?first.x+1:last.x,y2:0});
   const stops=[];for(const point of points){const pos=(point.x-first.x)/Math.max(1,last.x-first.x);point.e.groups.forEach((g,i)=>stops.push({offset:Math.max(0,Math.min(1,pos+(i-(point.e.groups.length-1)/2)*.002)),colour:sensoryColours[g]}))}stops.sort((a,b)=>a.offset-b.offset).forEach(s=>gradient.append(svgElement('stop',{offset:s.offset,'stop-color':s.colour})));defs.append(gradient);
   if(points.length>1){let d=`M ${first.x} ${first.y}`;for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],mid=(a.x+b.x)/2;d+=` C ${mid} ${a.y} ${mid} ${b.y} ${b.x} ${b.y}`}group.append(svgElement('path',{d,fill:'none',stroke:`url(#${id})`,class:'flow-string','stroke-width':1.05,'pointer-events':'none'}))}
@@ -520,17 +555,17 @@ function renderEventFlow(root,entries){
 
 function renderTextDensity(root,entries){
  const grouped=new Map();for(const {r,e} of entries){if(!grouped.has(r.key))grouped.set(r.key,{r,events:[]});grouped.get(r.key).events.push(e)}
- const rows=[...grouped.values()].map(x=>({...x,characters:Array.from(x.r.text).length})).filter(x=>x.characters>0);
+ const rows=[...grouped.values()].map(x=>({...x,characters:narrativeLength(x.r)})).filter(x=>x.characters>0);
  for(const x of rows)x.density=x.events.length*1000/x.characters;
  rows.sort((a,b)=>(densitySort==='density'?b.density-a.density:b.events.length-a.events.length)||b.events.length-a.events.length||a.r.key.localeCompare(b.r.key));
- root.append(el('h2','research-heading','Where the senses gather'),el('p','research-note','Rank narratives by annotation density or total sensory events. Select a bar to highlight a narrative. Open its source text only when needed.'));
+ root.append(el('h2','research-heading','Where the senses gather'),el('p','research-note','Rank narratives by annotation density or total sensory events. Select a bar to highlight a narrative. Reading is available for the 24 selected examples.'));
  const controls=el('div','density-controls');controls.setAttribute('role','group');controls.setAttribute('aria-label','Rank narratives by');
  for(const [key,label] of [['density','Density'],['events','Event count']]){const b=button(label,()=>{densitySort=key;renderConfigurations()});b.setAttribute('aria-pressed',String(densitySort===key));controls.append(b)}root.append(controls);
  researchLegend(root);
  const top=rows[0],summary=el('div','density-summary');summary.append(el('strong','',top?(densitySort==='density'?top.density.toFixed(1):top.events.length):'0'),el('span','',densitySort==='density'?'Highest density · events / 1,000 characters':'Highest event count · one narrative'));root.append(summary);
  root.append(el('p','research-note',`${rows.length} narratives with matching events · ${densityShowAll?'all ranks':'top '+Math.min(20,rows.length)} shown`));
  const caption=el('div','density-caption');const captionTitle=el('strong','','Explore the weave'),captionMeta=el('span','','Hover or focus a strand to inspect a narrative · click to select');caption.append(captionTitle,captionMeta);root.append(caption);
- const selectedRow=rows.find(x=>x.r.key===densitySelected);if(selectedRow){const read=button('View source text',()=>chooseEvent(selectedRow.r,selectedRow.events[0],true));read.dataset.viewSource='';root.append(read)}
+ const selectedRow=rows.find(x=>x.r.key===densitySelected);if(selectedRow&&canReadRecord(selectedRow.r)){const read=button('View source text',()=>chooseEvent(selectedRow.r,selectedRow.events[0],true));read.dataset.viewSource='';root.append(read)}
  const list=el('div','density-list'),max=Math.max(1,...rows.map(x=>densitySort==='density'?x.density:x.events.length));
  rows.slice(0,densityShowAll?rows.length:20).forEach((x,i)=>{
   const value=densitySort==='density'?x.density:x.events.length,b=button('',()=>{densitySelected=x.r.key;chooseEvent(x.r,[...x.events].sort((a,b)=>a.start-b.start)[0])});b.className='density-row'+(densitySelected===x.r.key?' is-selected':'');b.setAttribute('aria-pressed',String(densitySelected===x.r.key));b.dataset.record=x.r.key;const describe=()=>{captionTitle.textContent=`${String(i+1).padStart(2,'0')} · ${x.r.title}`;captionMeta.textContent=`${collections[x.r.collection]} · ${x.r.id} · ${x.events.length} events · ${x.density.toFixed(1)} / 1,000 characters`};b.onpointerenter=describe;b.onfocus=describe;if(densitySelected===x.r.key)describe();
@@ -547,3 +582,7 @@ function renderTextDensity(root,entries){
 document.querySelector('a.brand').onclick=ev=>{ev.preventDefault();clearAllFilters();document.querySelectorAll('select').forEach(s=>{for(const o of s.options)o.selected=o.defaultSelected});window.scrollTo(0,0);location.href=location.pathname};
 
 let chartResizeTimer;window.addEventListener('resize',()=>{clearTimeout(chartResizeTimer);chartResizeTimer=setTimeout(()=>{if(researchView==='flow')renderConfigurations()},150)});
+
+// Dataset-derived documentation stays in sync with the reviewed annotations.
+const annotationCounts=window.VERSE_DATA.counts;
+$('#annotation-count-summary').textContent=`The underlying pilot coding includes ${annotationCounts.events} sensory events, ${annotationCounts.candidates} unresolved candidates and ${annotationCounts.responses.toLocaleString()} response annotations. Only sensory events contribute to maps and graphs. Additional layers are optional. An event with several evidence passages still counts once.`;
