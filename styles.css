@@ -84,7 +84,7 @@
 #configuration.night .research-view-tabs button[aria-pressed=true]{background:#aad9d1;border-color:#aad9d1;color:#102d32;box-shadow:inset 0 -2px 0 #4fd1bd}
 #configuration.night #clear-tools-filters:not(:disabled){background:#aad9d1;border-color:#aad9d1;color:#102d32}
 
-.translation-block .translation-status{display:block;background:#fff0e2;border-left:3px solid #e5a16b;border-radius:0 5px 5px 0;color:#795032;padding:10px 13px;margin:10px 0 18px;font-size:13px;line-height:1.6;font-weight:500}
+.translation-block .translation-status{display:block;background:#fff0e2;border-left:0;border-radius:5px;color:#795032;padding:10px 13px;margin:10px 0 18px;font-size:13px;line-height:1.6;font-weight:500}
 /* Rounded strands: retain the compact weave without rectangular track bands. */
 :root{--control-radius:10px}
 .density-list{gap:1px}
@@ -217,7 +217,7 @@ a.brand{color:inherit;text-decoration:none;cursor:pointer}a.brand:hover{color:#4
 .heat-controls .heat-contour-toggle{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
 .heat-controls .heat-contour-toggle input{width:16px;height:16px;flex:none;accent-color:#559f98}
 
-/* VERSE Luminous — shared semantic tokens, no layout changes. */
+/* VERSE Luminous – shared semantic tokens, no layout changes. */
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg-app:#07111F; --bg-secondary:#0B1726; --bg-panel:#0F1D2C; --bg-elevated:#132131;

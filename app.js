@@ -27,7 +27,7 @@ function chartLabelColour(fill){
 let mapView='density',countryLayer,selectedEvent=null;
 let densitySort='density',densityShowAll=true,densitySelected=null;
 document.addEventListener('click',ev=>{if(densitySelected&&!ev.target.closest('.density-list,[data-view-source]')){densitySelected=null;document.querySelector('#research-view [data-view-source]')?.remove();document.querySelector('.density-list')?.classList.remove('has-selection');document.querySelectorAll('.density-row.is-selected').forEach(row=>{row.classList.remove('is-selected');row.setAttribute('aria-pressed','false')});const caption=document.querySelector('.density-caption');if(caption){caption.querySelector('strong').textContent='Explore the weave';caption.querySelector('span').textContent='Hover or focus a strand to inspect a narrative · click to select'}}},true);
-let configModes=new Set(Object.keys(modeNames)),eventMarks='events',researchView='comparison',flowSelected=null;
+let configModes=new Set(Object.keys(modeNames)),eventMarks='events',researchView='flow',flowSelected=null;
 let selected=translatedExamples[0]?.key,tab='original',highlight=true,filtered=DATA;
 let readingSelected=selected;
 let showResponses=false,showCandidates=false,showObservations=false;
@@ -133,16 +133,16 @@ function original(r,parent,isTranslation=false){
 }
 function translation(r,parent){
  if(!r.translation)return;
- const status=r.reviewAnnotations?`Working translation · ${r.reviewAnnotations.basis==='data.docx'?'Coding revised from the supplied review.':'Coding revised from the earlier discussion; this example was absent from the review document.'} Original-language alignment remains provisional.`:`Working translation · Not reviewed by a human. ${r.translationAlignedEvents===r.events.length?'Sensory highlights are provisionally aligned with the original annotations.':'Some sensory highlights are not yet aligned with the original annotations.'}`;
+ const status='Working translation · Not yet reviewed by a human.';
  const section=el('section','translation-block');section.setAttribute('aria-label','English translation');section.append(el('h3','language-heading','English translation'),el('p','hint translation-status',status));
  original(r,section,true);
  if(r.translationNotes.length){const d=el('details');d.append(el('summary','', 'Translator notes'));r.translationNotes.forEach(n=>d.append(el('p','',n)));section.append(d)}parent.append(section);
 }
 
-function contexts(r,parent){const section=el('div','context');section.append(el('h3','', 'Narrative context'));const dl=el('dl');for(const [k,label] of [['place','Place'],['time','Time'],['movement','Movement']]){dl.append(el('dt','',label),el('dd','',r.context[k]||'Not coded'))}section.append(dl,el('p','hint','Contexts recorded for sensory events. Event details show their supporting evidence.'));parent.append(section)}
+function contexts(r,parent){const section=el('div','context');section.append(el('h3','', 'Narrative context'));const dl=el('dl');for(const [k,label] of [['place','Place'],['time','Time'],['movement','Movement']]){dl.append(el('dt','',label),el('dd','',r.context[k]||'Not coded'))}section.append(dl);parent.append(section)}
 function reviewDecisions(r,parent){
  if(!r.reviewAnnotations)return;
- const review=r.reviewAnnotations,d=el('details','annotation-review');d.append(el('summary','','Annotation review'),el('p','hint',`Basis: ${review.basis}. ${review.original_alignment}.`));
+ const review=r.reviewAnnotations,d=el('details','annotation-review');d.append(el('summary','','Annotation review'));
  if(review.notes)d.append(el('p','',review.notes));
  if(review.decisions.length){const table=el('table'),head=el('thead'),tr=el('tr');tr.append(el('th','','Review fragment'),el('th','','Classification and reasoning'));head.append(tr);table.append(head);const body=el('tbody');for(const row of review.decisions){if(row[0].trim()==='Fragment')continue;const line=el('tr');line.append(el('td','',row[0]),el('td','',row[1]||'No additional classification supplied.'));body.append(line)}table.append(body);d.append(table)}parent.append(d);
 }
