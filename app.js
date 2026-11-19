@@ -136,7 +136,7 @@ function translation(r,parent){
  const status='Working translation · Not yet reviewed by a human.';
  const section=el('section','translation-block');section.setAttribute('aria-label','English translation');section.append(el('h3','language-heading','English translation'),el('p','hint translation-status',status));
  original(r,section,true);
- if(r.translationNotes.length){const d=el('details');d.append(el('summary','', 'Translator notes'));r.translationNotes.forEach(n=>d.append(el('p','',n)));section.append(d)}parent.append(section);
+ parent.append(section);
 }
 
 function contexts(r,parent){const section=el('div','context');section.append(el('h3','', 'Narrative context'));const dl=el('dl');for(const [k,label] of [['place','Place'],['time','Time'],['movement','Movement']]){dl.append(el('dt','',label),el('dd','',r.context[k]||'Not coded'))}section.append(dl);parent.append(section)}
