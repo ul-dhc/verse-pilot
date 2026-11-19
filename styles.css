@@ -380,3 +380,5 @@ html[data-theme] #configuration #clear-tools-filters:not(:disabled):is(:hover,:f
 @media(max-width:600px){.source-text>.reader{padding:24px 18px}.reading-head{padding-inline:18px}.example-browser{grid-template-columns:1fr;padding-inline:18px}.example-pagination{justify-content:space-between}}
 
 .source-collection-link{margin:12px 0 18px;font-size:14px}.source-collection-link a{color:inherit;text-decoration:underline;text-underline-offset:3px}
+
+.source-collection-link a{display:inline-flex;align-items:center;gap:.35em}.source-collection-link svg{flex:none}
